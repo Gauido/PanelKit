@@ -1,6 +1,6 @@
 export { generate, pageFile, type GeneratedFiles, type RuntimeFiles } from './generate'
 export { registry, blockFor, type BlockDef, type PropField } from './registry'
-export { spanClass, styleClass, SPAN_CLASSES } from './layout'
+export { spanClass, layoutClass, spansFor, styleClass, type Device, type LayoutLike } from './layout'
 export { toZip } from './zip'
 export { kebab, camel, pascal } from './codegen'
 export { themePresets, accentColors, fonts, themeVars, type ThemePreset } from './themes'

@@ -5,7 +5,10 @@
   "description": "Open-source visual builder for CRMs and internal tools that exports a real React repo.",
   "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
   "scripts": {
     "dev": "pnpm --filter @panelkit/editor dev",
     "build": "pnpm --filter @panelkit/editor build",

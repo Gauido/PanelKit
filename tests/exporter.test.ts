@@ -30,7 +30,7 @@ describe('exporter', () => {
   it('turns events into readable code', () => {
     const page = files['src/pages/contactos.tsx']!
     expect(page).toContain("await datosDeEjemplo.request('POST', '/contacts', values)")
-    expect(page).toContain("toast(tpl('Contacto {{values.name}} creado', { values }), 'success')")
+    expect(page).toContain("toast(tpl('Contacto {{values.name}} creado', { values, state: page.get() }), 'success')")
     expect(page).toContain('await queryClient.invalidateQueries()')
   })
 
@@ -67,5 +67,111 @@ describe('exporter', () => {
     const out = generate(p, readRuntime())
     expect(out['src/api/client.ts']).toContain('import.meta.env.VITE_API_URL')
     expect(out['.env.example']).toBe('VITE_API_TOKEN=\nVITE_API_URL=\n')
+  })
+})
+
+describe('agenda and charts', () => {
+  const files = generate(turnosTemplate, readRuntime())
+  const agenda = files['src/pages/agenda.tsx']!
+
+  it('opens a prefilled form when a free slot is clicked', () => {
+    expect(agenda).toContain("onSlotClick={async (slot) => {")
+    expect(agenda).toContain("page.set('nuevo', bind('{{slot}}', { slot, state: page.get() }))")
+    expect(agenda).toContain("page.set('open_m_nuevo', true)")
+    expect(agenda).toContain("initialValues={bind('{{state.nuevo}}', { state })}")
+    expect(agenda).toContain("import { confirm } from '@/components/ui/confirm'")
+  })
+
+  it('lets filters drive other blocks and selects load options from the API', () => {
+    expect(agenda).toContain("const bookingsFiltered = useApiQuery(datosDelClub, tpl('/bookings?court={{state.cancha}}&date={{state.dia}}', { state }))")
+    expect(agenda).toContain("value={state['cancha']}")
+    expect(agenda).toContain("page.set('cancha', value)")
+    expect(agenda).toContain("optionData={{ courts: courts.data }}")
+  })
+
+  it('deletes a row through a templated path', () => {
+    expect(agenda).toContain("onRowDelete={async (row) => {")
+    expect(agenda).toContain("await datosDelClub.request('DELETE', tpl('/bookings/{{row.id}}', { row, state: page.get() }))")
+  })
+
+  it('mounts the confirm dialog and ships the new blocks', () => {
+    expect(files['src/main.tsx']).toContain('<ConfirmHost />')
+    for (const f of ['chart', 'calendar', 'availability-grid', 'timeline']) expect(files[`src/components/blocks/${f}.tsx`]).toBeTruthy()
+  })
+})
+
+describe('chart grouping', async () => {
+  const { groupRows } = await import('../packages/blocks/src/components/blocks/chart')
+  const rows = [
+    { court: 'A', amount: 10, date: '2026-01-05' },
+    { court: 'B', amount: 5, date: '2026-01-20' },
+    { court: 'A', amount: 20, date: '2026-02-01' },
+  ]
+  it('sums by label', () => {
+    expect(groupRows({ data: rows, labelField: 'court', valueField: 'amount', aggregate: 'sum' })).toEqual([
+      { label: 'A', value: 30 },
+      { label: 'B', value: 5 },
+    ])
+  })
+  it('counts by month', () => {
+    expect(groupRows({ data: rows, labelField: 'date', aggregate: 'count', dateGroup: 'month' })).toEqual([
+      { label: '2026-01', value: 2 },
+      { label: '2026-02', value: 1 },
+    ])
+  })
+})
+
+describe('page state, containers and custom code', () => {
+  const crm = generate(crmTemplate, readRuntime())['src/pages/contactos.tsx']!
+  const agenda = generate(turnosTemplate, readRuntime())['src/pages/agenda.tsx']!
+  const canchas = generate(turnosTemplate, readRuntime())['src/pages/canchas.tsx']!
+
+  it('keeps page variables and binds props to them', () => {
+    expect(crm).toContain('const page = usePageState({})')
+    expect(crm).toContain("page.set('seleccionado', bind('{{row}}', { row, state: page.get() }))")
+    expect(crm).toContain("initialValues={bind('{{state.seleccionado}}', { state })}")
+    expect(crm).toContain("await datosDeEjemplo.request('PUT', tpl('/contacts/{{state.seleccionado.id}}'")
+  })
+
+  it('renders modals outside the grid and opens them through state', () => {
+    expect(crm).toContain("open={Boolean(state['open_m_contacto'])}")
+    expect(crm).toContain("page.set('open_m_contacto', true)")
+    expect(crm).not.toMatch(/<Reveal[^>]*>\s*<Modal/)
+  })
+
+  it('escapes data in the HTML block through its scope', () => {
+    expect(crm).toContain('scope={{ state }}')
+  })
+
+  it('prints custom code inline with its helpers', () => {
+    expect(agenda).toContain('await (async ({ state, setState, apis, navigate, toast, refresh }: CodeScope) => {')
+    expect(agenda).toContain("  await apis.datosDelClub.request('PATCH', '/bookings/' + state.turno.id, { status: 'Pagada' })")
+  })
+
+  it('nests blocks in tabs and sections', () => {
+    expect(canchas).toContain("<Tabs variant=\"underline\" labels={['Listado', 'Nueva cancha']}>")
+    expect(canchas).toMatch(/<Section title="Listado" card=\{false\}>\s*<div className="col-span-12">\s*<DataTable/)
+  })
+})
+
+describe('templates at runtime', async () => {
+  const { resolve, tpl } = await import('../packages/blocks/src/lib/template')
+  it('returns whole values for a single placeholder', () => {
+    const row = { id: 3, name: 'Ana' }
+    expect(resolve('{{row}}', { row })).toBe(row)
+    expect(resolve('Hola {{row.name}}', { row })).toBe('Hola Ana')
+    expect(resolve({ a: '{{row.id}}', b: ['{{row.name}}'] }, { row })).toEqual({ a: 3, b: ['Ana'] })
+    expect(tpl('{{x.y}}', {})).toBe('')
+  })
+})
+
+describe('responsive layout', async () => {
+  const { layoutClass } = await import('../packages/exporter/src/layout')
+  it('uses container queries with per-device widths and visibility', () => {
+    expect(layoutClass({ span: 3 })).toBe('col-span-12 @3xl:col-span-6 @5xl:col-span-3')
+    expect(layoutClass({ span: 12 })).toBe('col-span-12')
+    expect(layoutClass({ span: 4, spanTablet: 4, spanMobile: 6 })).toBe('col-span-6 @3xl:col-span-4')
+    expect(layoutClass({ span: 6, hide: ['mobile'] })).toBe('col-span-12 @5xl:col-span-6 hidden @3xl:block')
+    expect(layoutClass({ span: 6, hide: ['desktop'] })).toBe('col-span-12 @5xl:col-span-6 @5xl:hidden')
   })
 })

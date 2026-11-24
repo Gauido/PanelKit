@@ -1,10 +1,10 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { BarChart3, Briefcase, CalendarDays, LayoutDashboard, Moon, Settings, Sun, Users, type LucideIcon } from 'lucide-react'
+import { BarChart3, Briefcase, CalendarDays, LayoutDashboard, LayoutGrid, Moon, Settings, Sun, Users, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { cn } from '../lib/utils'
 
-const icons: Record<string, LucideIcon> = { LayoutDashboard, Users, Briefcase, BarChart3, CalendarDays, Settings }
+const icons: Record<string, LucideIcon> = { LayoutDashboard, LayoutGrid, Users, Briefcase, BarChart3, CalendarDays, Settings }
 
 export type NavItem = { path: string; title: string; icon?: string }
 
@@ -24,8 +24,8 @@ export function AppShell({ name, nav, mode = 'system', children }: { name: strin
   const location = useLocation()
 
   return (
-    <div className="flex min-h-dvh bg-background text-foreground">
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-border bg-card/60 p-4 backdrop-blur md:flex">
+    <div className="@container/shell flex min-h-dvh bg-background text-foreground">
+      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-border bg-card/60 p-4 backdrop-blur @3xl/shell:flex">
         <div className="flex items-center gap-2 px-2 py-1.5">
           <span className="grid size-8 place-items-center rounded-[calc(var(--radius)-4px)] bg-primary text-sm font-bold text-primary-foreground shadow-sm">
             {name.slice(0, 1).toUpperCase()}
@@ -69,7 +69,7 @@ export function AppShell({ name, nav, mode = 'system', children }: { name: strin
         </button>
       </aside>
       <main className="min-w-0 flex-1">
-        <nav className="flex gap-1 overflow-x-auto border-b border-border p-2 md:hidden">
+        <nav className="flex gap-1 overflow-x-auto border-b border-border p-2 @3xl/shell:hidden">
           {nav.map((item) => (
             <NavLink key={item.path} to={item.path} end className={({ isActive }) => cn('rounded-md px-3 py-1.5 text-sm whitespace-nowrap', isActive ? 'bg-muted font-medium' : 'text-muted-foreground')}>
               {item.title}
@@ -83,7 +83,7 @@ export function AppShell({ name, nav, mode = 'system', children }: { name: strin
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            className="mx-auto w-full max-w-7xl p-4 md:p-8"
+            className="mx-auto w-full max-w-7xl p-4 @3xl/shell:p-8"
           >
             {children ?? <Outlet />}
           </motion.div>

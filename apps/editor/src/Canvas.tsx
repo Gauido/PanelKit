@@ -4,24 +4,44 @@ import { CSS } from '@dnd-kit/utilities'
 import { Copy, GripVertical, Minus, Plus, Trash2 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { cn } from '@panelkit/blocks'
-import { registry, spanClass, styleClass } from '@panelkit/exporter'
+import { layoutClass, registry, spansFor, styleClass } from '@panelkit/exporter'
 import type { Node } from '@panelkit/schema'
 import { useCurrentPage, useEditor } from './store'
-import { BlockView } from './lib/render'
+import { BlockView, type RenderChildren } from './lib/render'
+import { PageStateProvider } from './lib/page-state'
+import { DeviceFrame } from './lib/device-frame'
+import { useDropHint } from './lib/drop-hint'
 
-function SortableBlock({ node }: { node: Node }) {
+function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
   const selected = useEditor((s) => s.selectedId === node.id)
   const { select, updateNode, removeNode, duplicateNode, selectPage, project } = useEditor()
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: node.id, data: { kind: 'node' } })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: node.id, data: { kind: 'node', container: Boolean(registry[node.type]?.container) } })
   const def = registry[node.type]
-  const span = node.layout.span
+  const device = useEditor((s) => s.device)
+  // The +/- buttons change the width for the device being previewed.
+  const span = spansFor(node.layout)[device]
+  // Hidden on this device: still shown (faded) so it can be selected and edited.
+  const hiddenHere = Boolean(node.layout.hide?.includes(device))
+  const hint = useDropHint((h) => (h.id === node.id ? h.zone : null))
+  const fullRow = inList || span === 12
+  const setSpan = (v: number) =>
+    updateNode(node.id, (n) => {
+      const next = Math.min(12, Math.max(1, v))
+      if (device === 'desktop') n.layout.span = next
+      else if (device === 'tablet') n.layout.spanTablet = next
+      else n.layout.spanMobile = next
+    })
 
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cn(spanClass(span), 'group relative', isDragging && 'z-10 opacity-60')}
+      data-node-id={node.id}
+      className={cn(inList ? 'col-span-12' : layoutClass({ ...node.layout, hide: undefined }), hiddenHere && 'opacity-35', 'group relative', isDragging && 'z-10 opacity-60')}
       onClickCapture={(e) => {
+        // Let the innermost block under the pointer take the click.
+        const owner = (e.target as HTMLElement).closest('[data-node-id]')
+        if (owner && owner !== e.currentTarget) return
         if (!selected) {
           e.stopPropagation()
           e.preventDefault()
@@ -38,6 +58,8 @@ function SortableBlock({ node }: { node: Node }) {
         <div className={styleClass(node.style)}>
           <BlockView
             node={node}
+            design
+            renderChildren={renderChildren}
             live={selected}
             onNavigate={(to) => {
               const page = project.pages.find((p) => p.path === to)
@@ -46,6 +68,17 @@ function SortableBlock({ node }: { node: Node }) {
           />
         </div>
       </div>
+      {hint && hint !== 'inside' && (
+        // Where the dragged block will land: a line before or after this one.
+        <span
+          className={cn(
+            'pointer-events-none absolute z-30 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_oklab,var(--color-primary)_25%,transparent)]',
+            fullRow ? 'inset-x-1 h-1' : 'inset-y-1 w-1',
+            fullRow ? (hint === 'before' ? '-top-3' : '-bottom-3') : hint === 'before' ? '-left-2.5' : '-right-2.5',
+          )}
+        />
+      )}
+      {hint === 'inside' && <span className="pointer-events-none absolute inset-0 z-30 rounded-[calc(var(--radius)+6px)] bg-primary/5 ring-2 ring-primary" />}
       <motion.div
         initial={false}
         animate={{ opacity: selected ? 1 : 0, y: selected ? 0 : 4 }}
@@ -56,11 +89,11 @@ function SortableBlock({ node }: { node: Node }) {
           {def?.label ?? node.type}
         </button>
         <span className="mx-1 h-4 w-px bg-border" />
-        <button className="rounded-md p-1 hover:bg-muted" onClick={() => updateNode(node.id, (n) => void (n.layout.span = Math.max(1, span - 1)))} aria-label="Más angosto">
+        <button className="rounded-md p-1 hover:bg-muted" onClick={() => setSpan(span - 1)} aria-label="Más angosto">
           <Minus className="size-3.5" />
         </button>
         <span className="w-9 text-center tabular-nums text-muted-foreground">{span}/12</span>
-        <button className="rounded-md p-1 hover:bg-muted" onClick={() => updateNode(node.id, (n) => void (n.layout.span = Math.min(12, span + 1)))} aria-label="Más ancho">
+        <button className="rounded-md p-1 hover:bg-muted" onClick={() => setSpan(span + 1)} aria-label="Más ancho">
           <Plus className="size-3.5" />
         </button>
         <span className="mx-1 h-4 w-px bg-border" />
@@ -75,18 +108,46 @@ function SortableBlock({ node }: { node: Node }) {
   )
 }
 
+/** Editable area inside a container: drop blocks here, reorder them, select them. */
+function NestedArea({ parent, layout }: { parent: Node; layout: 'grid' | 'list' }) {
+  const kids = parent.children ?? []
+  const { setNodeRef, isOver } = useDroppable({ id: `drop:${parent.id}`, data: { kind: 'container', parentId: parent.id } })
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn('@container grid min-h-20 grid-cols-12 content-start gap-x-4 gap-y-10 rounded-xl p-1 pt-8 transition-colors', isOver && 'bg-primary/5 ring-2 ring-dashed ring-primary/40')}
+    >
+      <SortableContext items={kids.map((n) => n.id)} strategy={rectSortingStrategy}>
+        {kids.map((n) => (
+          <SortableBlock key={n.id} node={n} inList={layout === 'list'} />
+        ))}
+      </SortableContext>
+      {kids.length === 0 && (
+        <p className="col-span-12 -mt-6 rounded-lg border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
+          Arrastrá bloques acá {layout === 'list' ? '(cada uno es una pestaña)' : ''}
+        </p>
+      )}
+    </div>
+  )
+}
+
+const renderChildren: RenderChildren = (parent, layout) => <NestedArea parent={parent} layout={layout} />
+
 export function Canvas() {
   const page = useCurrentPage()
   const select = useEditor((s) => s.select)
   const { setNodeRef, isOver } = useDroppable({ id: 'canvas', data: { kind: 'canvas' } })
+  const device = useEditor((s) => s.device)
 
   return (
+    <PageStateProvider key={page.id} initial={page.state ?? {}}>
     <div className="editor-dots min-h-0 flex-1 overflow-auto" onClick={() => select(null)}>
-      <div className="mx-auto max-w-6xl p-6 pt-12 md:p-10 md:pt-14">
+      <div className="p-6 pt-12 md:p-10 md:pt-14">
+        <DeviceFrame device={device}>
         <div
           ref={setNodeRef}
           className={cn(
-            'grid min-h-[60vh] grid-cols-12 content-start gap-x-4 gap-y-10 rounded-2xl p-2 transition-colors',
+            '@container grid min-h-[60vh] grid-cols-12 content-start gap-x-4 gap-y-10 rounded-2xl p-2 transition-colors',
             isOver && 'bg-primary/5 ring-2 ring-dashed ring-primary/40',
           )}
         >
@@ -104,7 +165,9 @@ export function Canvas() {
             </div>
           )}
         </div>
+        </DeviceFrame>
       </div>
     </div>
+    </PageStateProvider>
   )
 }

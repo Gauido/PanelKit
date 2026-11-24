@@ -1,6 +1,6 @@
-import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
+import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, closestCenter, pointerWithin, useSensor, useSensors, type CollisionDetection, type DragEndEvent, type DragMoveEvent, type DragOverEvent, type DragStartEvent } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { Braces, ChevronLeft, Download, Eye, FileUp, Keyboard, PenLine, Redo2, RotateCcw, Undo2, X } from 'lucide-react'
+import { Braces, ChevronLeft, Download, Eye, FileUp, Keyboard, Monitor, PenLine, Redo2, RotateCcw, Smartphone, Tablet, Undo2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { Button, cn, toast } from '@panelkit/blocks'
@@ -19,7 +19,8 @@ import { Theme } from './panels/Theme'
 import { Icon } from './lib/icon'
 import { IconButton } from './lib/ui'
 import { runtimeFiles } from './lib/runtime-files'
-import { useCurrentPage, useEditor } from './store'
+import { useCurrentPage, useEditor, type DropTarget } from './store'
+import { useDropHint, type DropZone } from './lib/drop-hint'
 
 const leftTabs = [
   { id: 'blocks', label: 'Bloques' },
@@ -37,8 +38,14 @@ function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+const devices = [
+  { id: 'desktop', label: 'Escritorio', icon: Monitor },
+  { id: 'tablet', label: 'Tablet', icon: Tablet },
+  { id: 'mobile', label: 'Celular', icon: Smartphone },
+] as const
+
 function TopBar({ onJson }: { onJson: () => void }) {
-  const { project, preview, setPreview, undo, redo, past, future, setProject, reset, closeProject } = useEditor()
+  const { project, preview, setPreview, undo, redo, past, future, setProject, reset, closeProject, device, setDevice } = useEditor()
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function exportRepo() {
@@ -77,6 +84,14 @@ function TopBar({ onJson }: { onJson: () => void }) {
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
           </>
         )}
+        <div className="ml-2 flex rounded-lg bg-muted p-0.5" role="group" aria-label="Tamaño de pantalla">
+          {devices.map((d) => (
+            <button key={d.id} title={d.label} aria-label={d.label} aria-pressed={device === d.id} onClick={() => setDevice(d.id)} className={cn('relative rounded-md p-1.5', device === d.id ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+              {device === d.id && <motion.span layoutId="device" className="absolute inset-0 rounded-md bg-card shadow-sm" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />}
+              <d.icon className="relative size-3.5" />
+            </button>
+          ))}
+        </div>
         <div className="ml-2 flex rounded-lg bg-muted p-0.5 text-[13px]">
           {[
             { on: false, label: 'Diseñar', icon: PenLine },
@@ -177,6 +192,25 @@ function FirstSteps() {
   )
 }
 
+/** Last pointer position, in viewport coordinates. dnd-kit's delta also counts panel scrolling. */
+const pointer = { x: 0, y: 0 }
+if (typeof window !== 'undefined') {
+  window.addEventListener('pointermove', (e) => ((pointer.x = e.clientX), (pointer.y = e.clientY)), { passive: true, capture: true })
+}
+
+/** The innermost thing under the pointer wins, so blocks can be dropped inside containers. */
+const collision: CollisionDetection = (args) => {
+  const hits = pointerWithin({ ...args, pointerCoordinates: pointer.x || pointer.y ? { ...pointer } : args.pointerCoordinates }).filter((h) => h.id !== args.active.id)
+  if (hits.length) {
+    const area = (id: string | number) => {
+      const r = args.droppableRects.get(id)
+      return r ? r.width * r.height : Infinity
+    }
+    return [...hits].sort((a, b) => area(a.id) - area(b.id))
+  }
+  return closestCenter(args)
+}
+
 export function App() {
   const projectId = useEditor((s) => s.projectId)
   const project = useEditor((s) => s.project)
@@ -241,18 +275,38 @@ function Editor() {
     if (d?.kind === 'palette') setDragType(d.type as string)
   }
 
+  /** Which side of the block under the pointer the drop goes to. */
+  function zoneFor(over: DragOverEvent['over']): { target: DropTarget; hint: [string | null, DropZone | null] } {
+    if (!over) return { target: {}, hint: [null, null] }
+    const kind = over.data.current?.kind
+    if (kind === 'container') return { target: { parentId: over.data.current?.parentId as string }, hint: [over.data.current?.parentId as string, 'inside'] }
+    if (kind === 'canvas') return { target: {}, hint: [null, null] }
+    // Top/left part of a block: before it. Bottom/right part: after it. Middle of a container: inside it.
+    const r = over.rect
+    const id = String(over.id)
+    const { x: cx, y: cy } = pointer
+    if (over.data.current?.container && cy > r.top + r.height * 0.2 && cy < r.bottom - r.height * 0.2) return { target: { parentId: id }, hint: [id, 'inside'] }
+    if (cy > r.top + r.height * 0.66 || (cy > r.top + r.height * 0.33 && cx > r.left + r.width / 2)) return { target: { afterId: id }, hint: [id, 'after'] }
+    return { target: { beforeId: id }, hint: [id, 'before'] }
+  }
+
+  function onDragMove(e: DragMoveEvent) {
+    const [id, zone] = zoneFor(e.over).hint
+    const h = useDropHint.getState()
+    if (h.id !== id || h.zone !== zone) h.set(id === e.active.id ? null : id, zone)
+  }
+
   function onDragEnd(e: DragEndEvent) {
     setDragType(null)
+    useDropHint.getState().set(null, null)
     const { active, over } = e
     if (!over) return
-    const ids = page.children.map((n) => n.id)
-    const overIndex = ids.indexOf(String(over.id))
+    const { target } = zoneFor(over)
     if (active.data.current?.kind === 'palette') {
-      addNode(active.data.current.type as string, overIndex >= 0 ? overIndex : undefined)
+      addNode(active.data.current.type as string, target)
       return
     }
-    const from = ids.indexOf(String(active.id))
-    if (from >= 0 && overIndex >= 0 && from !== overIndex) moveNode(from, overIndex)
+    if (active.id !== over.id) moveNode(String(active.id), target)
   }
 
   return (
@@ -261,7 +315,7 @@ function Editor() {
       {preview ? (
         <Preview />
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragType(null)}>
+        <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragMove={onDragMove} onDragEnd={onDragEnd} onDragCancel={() => (setDragType(null), useDropHint.getState().set(null, null))}>
           <div className="flex min-h-0 flex-1">
             <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-card/50">
               <nav className="flex gap-1 border-b border-border p-2">

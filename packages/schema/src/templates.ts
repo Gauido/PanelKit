@@ -47,6 +47,8 @@ export const crmTemplate: ProjectT = Project.parse({
     { id: 'deals', source: 'demo', method: 'GET', path: '/deals', fields: ['id', 'title', 'company', 'amount', 'stage'] },
     { id: 'tasks', source: 'demo', method: 'GET', path: '/tasks', fields: ['id', 'title', 'owner', 'due', 'done'] },
     { id: 'createContact', source: 'demo', method: 'POST', path: '/contacts', fields: [] },
+    { id: 'deleteContact', source: 'demo', method: 'DELETE', path: '/contacts/{{row.id}}', fields: [] },
+    { id: 'updateContact', source: 'demo', method: 'PUT', path: '/contacts/{{state.seleccionado.id}}', fields: [] },
   ],
   pages: [
     {
@@ -60,6 +62,8 @@ export const crmTemplate: ProjectT = Project.parse({
         { id: 'k2', type: 'KpiCard', layout: { span: 3 }, props: { title: 'Oportunidades', query: 'deals', aggregate: 'count', icon: 'Briefcase', delta: 8 } },
         { id: 'k3', type: 'KpiCard', layout: { span: 3 }, props: { title: 'Tareas', query: 'tasks', aggregate: 'count', icon: 'Activity', delta: -3 } },
         { id: 'k4', type: 'KpiCard', layout: { span: 3 }, props: { title: 'En juego', query: 'deals', aggregate: 'sum', field: 'amount', prefix: '$', icon: 'DollarSign', delta: 21 } },
+        { id: 'ch1', type: 'Chart', layout: { span: 7 }, props: { title: 'Monto por empresa', query: 'deals', chartType: 'bar', labelField: 'company', aggregate: 'sum', valueField: 'amount', dateGroup: 'none', height: 220 } },
+        { id: 'ch2', type: 'Chart', layout: { span: 5 }, props: { title: 'Contactos por etapa', query: 'contacts', chartType: 'donut', labelField: 'stage', aggregate: 'count', dateGroup: 'none', height: 220 } },
         {
           id: 't0',
           type: 'DataTable',
@@ -72,7 +76,7 @@ export const crmTemplate: ProjectT = Project.parse({
             columns: [
               { field: 'title', label: 'Oportunidad' },
               { field: 'company', label: 'Empresa' },
-              { field: 'amount', label: 'Monto', format: 'number' },
+              { field: 'amount', label: 'Monto', format: 'money' },
               { field: 'stage', label: 'Etapa', format: 'badge' },
             ],
           },
@@ -110,6 +114,7 @@ export const crmTemplate: ProjectT = Project.parse({
             query: 'contacts',
             pageSize: 8,
             searchable: true,
+            filterField: 'stage',
             columns: [
               { field: 'name', label: 'Nombre' },
               { field: 'email', label: 'Email', format: 'email' },
@@ -117,7 +122,18 @@ export const crmTemplate: ProjectT = Project.parse({
               { field: 'stage', label: 'Etapa', format: 'badge' },
             ],
           },
-          events: { onRowClick: [{ type: 'toast', message: 'Elegiste a {{row.name}}', tone: 'info' }] },
+          events: {
+            onRowClick: [
+              { type: 'setState', key: 'seleccionado', value: '{{row}}' },
+              { type: 'openModal', target: 'm_contacto' },
+            ],
+            onRowDelete: [
+              { type: 'confirm', message: '¿Eliminar a {{row.name}}?' },
+              { type: 'callQuery', query: 'deleteContact', body: 'none' },
+              { type: 'toast', message: 'Contacto eliminado', tone: 'success' },
+              { type: 'refresh' },
+            ],
+          },
         },
         {
           id: 'f1',
@@ -142,6 +158,44 @@ export const crmTemplate: ProjectT = Project.parse({
               { type: 'refresh' },
             ],
           },
+        },
+        {
+          id: 'm_contacto',
+          type: 'Modal',
+          props: { title: '{{state.seleccionado.name}}', description: '{{state.seleccionado.company}} · {{state.seleccionado.city}}', kind: 'drawer', size: 'md' },
+          children: [
+            {
+              id: 'm_html',
+              type: 'HtmlBlock',
+              props: {
+                html: '<div class="flex items-center gap-3 rounded-xl bg-muted p-4">\n  <div class="grid size-11 place-items-center rounded-full bg-primary text-primary-foreground font-semibold">{{state.seleccionado.name}}</div>\n  <div><p class="font-medium">{{state.seleccionado.email}}</p><p class="text-sm opacity-70">{{state.seleccionado.phone}}</p></div>\n</div>',
+              },
+            },
+            {
+              id: 'm_form',
+              type: 'EntityForm',
+              props: {
+                title: 'Editar contacto',
+                submitLabel: 'Guardar cambios',
+                initialValues: '{{state.seleccionado}}',
+                fields: [
+                  { name: 'name', label: 'Nombre', type: 'text', required: true, span: 2 },
+                  { name: 'email', label: 'Email', type: 'email', required: true },
+                  { name: 'phone', label: 'Teléfono', type: 'tel' },
+                  { name: 'company', label: 'Empresa', type: 'text' },
+                  { name: 'stage', label: 'Etapa', type: 'select', options: 'Lead, Calificado, Propuesta, Cliente' },
+                ],
+              },
+              events: {
+                onSubmit: [
+                  { type: 'callQuery', query: 'updateContact', body: 'values' },
+                  { type: 'toast', message: '{{values.name}} actualizado', tone: 'success' },
+                  { type: 'closeModal', target: 'm_contacto' },
+                  { type: 'refresh' },
+                ],
+              },
+            },
+          ],
         },
       ],
     },
@@ -173,13 +227,24 @@ export const crmTemplate: ProjectT = Project.parse({
   ],
 })
 
+/** Sample dates around the day the project is created, so the agenda never looks empty. */
+const day = (offset: number) => {
+  const d = new Date()
+  d.setDate(d.getDate() + offset)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 const bookings = [
-  { id: 1, customer: 'Ana Gómez', court: 'Cancha 1', date: '2026-11-24', time: '18:00', amount: 24000, status: 'Pagada' },
-  { id: 2, customer: 'Bruno Díaz', court: 'Cancha 2', date: '2026-11-24', time: '19:30', amount: 24000, status: 'Seña' },
-  { id: 3, customer: 'Carla Ruiz', court: 'Cancha 1', date: '2026-11-24', time: '21:00', amount: 28000, status: 'Pendiente' },
-  { id: 4, customer: 'Diego Paz', court: 'Cancha 3', date: '2026-11-25', time: '17:00', amount: 22000, status: 'Pagada' },
-  { id: 5, customer: 'Elena Sosa', court: 'Cancha 2', date: '2026-11-25', time: '20:00', amount: 28000, status: 'Seña' },
-  { id: 6, customer: 'Fede Luna', court: 'Cancha 3', date: '2026-11-26', time: '18:30', amount: 24000, status: 'Cancelada' },
+  { id: 1, customer: 'Ana Gómez', court: 'Cancha 1', date: day(0), time: '18:00', duration: 60, amount: 24000, status: 'Pagada' },
+  { id: 2, customer: 'Bruno Díaz', court: 'Cancha 2', date: day(0), time: '19:30', duration: 90, amount: 33000, status: 'Seña' },
+  { id: 3, customer: 'Carla Ruiz', court: 'Cancha 1', date: day(0), time: '21:00', duration: 60, amount: 28000, status: 'Pendiente' },
+  { id: 4, customer: 'Liga martes', court: 'Cancha 3', date: day(0), time: '20:00', duration: 120, amount: 40000, status: 'Pagada' },
+  { id: 5, customer: 'Diego Paz', court: 'Cancha 3', date: day(1), time: '17:00', duration: 60, amount: 22000, status: 'Pagada' },
+  { id: 6, customer: 'Elena Sosa', court: 'Cancha 2', date: day(1), time: '20:00', duration: 60, amount: 28000, status: 'Seña' },
+  { id: 7, customer: 'Fede Luna', court: 'Cancha 3', date: day(2), time: '18:30', duration: 60, amount: 24000, status: 'Cancelada' },
+  { id: 8, customer: 'Gala Ríos', court: 'Cancha 1', date: day(-1), time: '19:00', duration: 60, amount: 24000, status: 'Pagada' },
+  { id: 9, customer: 'Hugo Vera', court: 'Cancha 2', date: day(-2), time: '22:00', duration: 60, amount: 28000, status: 'Pagada' },
+  { id: 10, customer: 'Iris Mena', court: 'Cancha 1', date: day(3), time: '20:30', duration: 60, amount: 24000, status: 'Pendiente' },
 ]
 
 const courts = [
@@ -194,28 +259,80 @@ export const turnosTemplate: ProjectT = Project.parse({
   theme: { preset: 'cancha', accent: 'emerald', primary: '#416900', radius: 12, mode: 'light', font: 'Plus Jakarta Sans', surface: 'warm', motion: 'subtle' },
   dataSources: [{ id: 'club', type: 'static', name: 'Datos del club', tables: { bookings, courts } }],
   queries: [
-    { id: 'bookings', source: 'club', method: 'GET', path: '/bookings', fields: ['id', 'customer', 'court', 'date', 'time', 'amount', 'status'] },
+    { id: 'bookings', source: 'club', method: 'GET', path: '/bookings', fields: ['id', 'customer', 'court', 'date', 'time', 'duration', 'amount', 'status'] },
     { id: 'courts', source: 'club', method: 'GET', path: '/courts', fields: ['id', 'name', 'surface', 'roof', 'price'] },
+    { id: 'bookingsFiltered', source: 'club', method: 'GET', path: '/bookings?court={{state.cancha}}&date={{state.dia}}', fields: ['id', 'customer', 'court', 'date', 'time', 'duration', 'amount', 'status'] },
     { id: 'createBooking', source: 'club', method: 'POST', path: '/bookings', fields: [] },
+    { id: 'deleteBooking', source: 'club', method: 'DELETE', path: '/bookings/{{row.id}}', fields: [] },
+    { id: 'createCourt', source: 'club', method: 'POST', path: '/courts', fields: [] },
   ],
   pages: [
     {
       id: 'agenda',
       path: '/',
       title: 'Agenda',
-      icon: 'CalendarDays',
+      icon: 'LayoutGrid',
       children: [
         { id: 'a1', type: 'PageHeader', props: { title: 'Agenda del club', subtitle: 'Turnos, cobros y canchas de un vistazo' } },
         { id: 'a2', type: 'KpiCard', layout: { span: 4 }, props: { title: 'Reservas', query: 'bookings', aggregate: 'count', icon: 'Activity', delta: 15 } },
         { id: 'a3', type: 'KpiCard', layout: { span: 4 }, props: { title: 'Facturado', query: 'bookings', aggregate: 'sum', field: 'amount', prefix: '$', icon: 'DollarSign', delta: 9 } },
         { id: 'a4', type: 'KpiCard', layout: { span: 4 }, props: { title: 'Canchas', query: 'courts', aggregate: 'count', icon: 'Briefcase' } },
         {
+          id: 'g1',
+          type: 'AvailabilityGrid',
+          props: {
+            title: 'Disponibilidad',
+            query: 'bookings',
+            resources: 'Cancha 1, Cancha 2, Cancha 3',
+            resourceField: 'court',
+            dateField: 'date',
+            timeField: 'time',
+            durationField: 'duration',
+            labelField: 'customer',
+            statusField: 'status',
+            startTime: '16:00',
+            endTime: '24:00',
+            slotMinutes: 30,
+          },
+          events: {
+            onSlotClick: [
+              { type: 'setState', key: 'nuevo', value: '{{slot}}' },
+              { type: 'openModal', target: 'm_nuevo' },
+            ],
+            onBookingClick: [
+              { type: 'setState', key: 'turno', value: '{{row}}' },
+              { type: 'openModal', target: 'm_turno' },
+            ],
+          },
+        },
+        {
+          id: 'f_cancha',
+          type: 'Filter',
+          layout: { span: 4 },
+          props: { label: 'Cancha', inputType: 'select', stateKey: 'cancha', optionsQuery: 'courts', optionLabel: 'name', optionValue: 'name', allLabel: 'Todas' },
+        },
+        {
+          id: 'f_dia',
+          type: 'Filter',
+          layout: { span: 4 },
+          props: { label: 'Día', inputType: 'date', stateKey: 'dia' },
+        },
+        {
           id: 'a5',
           type: 'DataTable',
           layout: { span: 8 },
+          events: {
+            onRowDelete: [
+              { type: 'confirm', message: '¿Cancelar el turno de {{row.customer}}?' },
+              { type: 'callQuery', query: 'deleteBooking', body: 'none' },
+              { type: 'toast', message: 'Turno eliminado', tone: 'success' },
+              { type: 'refresh' },
+            ],
+          },
           props: {
             title: 'Próximos turnos',
-            query: 'bookings',
+            filterField: 'status',
+            query: 'bookingsFiltered',
             pageSize: 6,
             searchable: true,
             columns: [
@@ -236,9 +353,9 @@ export const turnosTemplate: ProjectT = Project.parse({
             submitLabel: 'Reservar',
             fields: [
               { name: 'customer', label: 'Cliente', type: 'text', required: true, span: 2 },
-              { name: 'court', label: 'Cancha', type: 'select', options: 'Cancha 1, Cancha 2, Cancha 3', required: true, span: 2 },
+              { name: 'court', label: 'Cancha', type: 'select', optionsQuery: 'courts', optionLabel: 'name', optionValue: 'name', required: true, span: 2 },
               { name: 'date', label: 'Día', type: 'date', required: true },
-              { name: 'time', label: 'Hora', type: 'text', pattern: '[0-2][0-9]:[0-5][0-9]', message: 'Usá el formato 18:30', placeholder: '18:30', required: true },
+              { name: 'time', label: 'Hora', type: 'time', required: true },
               { name: 'amount', label: 'Monto', type: 'number', min: 0 },
               { name: 'status', label: 'Estado', type: 'select', options: 'Pendiente, Seña, Pagada' },
             ],
@@ -251,6 +368,103 @@ export const turnosTemplate: ProjectT = Project.parse({
             ],
           },
         },
+        {
+          id: 'm_nuevo',
+          type: 'Modal',
+          props: { title: 'Nuevo turno', description: '{{state.nuevo.resource}} · {{state.nuevo.date}} a las {{state.nuevo.time}}', kind: 'modal', size: 'md' },
+          children: [
+            {
+              id: 'mn_form',
+              type: 'EntityForm',
+              props: {
+                submitLabel: 'Reservar',
+                initialValues: '{{state.nuevo}}',
+                fields: [
+                  { name: 'customer', label: 'Cliente', type: 'text', required: true, span: 2 },
+                  { name: 'court', label: 'Cancha', type: 'select', optionsQuery: 'courts', optionLabel: 'name', optionValue: 'name', required: true },
+                  { name: 'status', label: 'Estado', type: 'select', options: 'Pendiente, Seña, Pagada', required: true },
+                  { name: 'date', label: 'Día', type: 'date', required: true },
+                  { name: 'time', label: 'Hora', type: 'time', required: true },
+                  { name: 'duration', label: 'Duración (min)', type: 'number', min: 30 },
+                  { name: 'amount', label: 'Monto', type: 'number', min: 0 },
+                ],
+              },
+              events: {
+                onSubmit: [
+                  { type: 'callQuery', query: 'createBooking', body: 'values' },
+                  { type: 'toast', message: 'Turno reservado para {{values.customer}}', tone: 'success' },
+                  { type: 'closeModal', target: 'm_nuevo' },
+                  { type: 'refresh' },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          id: 'm_turno',
+          type: 'Modal',
+          props: { title: 'Turno de {{state.turno.customer}}', description: '{{state.turno.court}} · {{state.turno.date}} {{state.turno.time}}', kind: 'drawer', size: 'sm' },
+          children: [
+            {
+              id: 'mt_html',
+              type: 'HtmlBlock',
+              props: {
+                html: '<dl class="grid grid-cols-2 gap-3 text-sm">\n  <div class="rounded-xl bg-muted p-3"><dt class="opacity-60">Estado</dt><dd class="text-base font-semibold">{{state.turno.status}}</dd></div>\n  <div class="rounded-xl bg-muted p-3"><dt class="opacity-60">Monto</dt><dd class="text-base font-semibold">$ {{state.turno.amount}}</dd></div>\n  <div class="rounded-xl bg-muted p-3"><dt class="opacity-60">Duración</dt><dd class="text-base font-semibold">{{state.turno.duration}} min</dd></div>\n  <div class="rounded-xl bg-muted p-3"><dt class="opacity-60">Cancha</dt><dd class="text-base font-semibold">{{state.turno.court}}</dd></div>\n</dl>',
+              },
+            },
+            {
+              id: 'mt_pay',
+              type: 'ActionButton',
+              layout: { span: 6 },
+              props: { label: 'Marcar como pagado', variant: 'primary', fullWidth: true },
+              events: {
+                onClick: [
+                  {
+                    type: 'runCode',
+                    code: "// Código propio: cualquier lógica que no entre en una acción.\nawait apis.datosDelClub.request('PATCH', '/bookings/' + state.turno.id, { status: 'Pagada' })\ntoast('Cobrado: $' + state.turno.amount)",
+                  },
+                  { type: 'closeModal', target: 'm_turno' },
+                  { type: 'refresh' },
+                ],
+              },
+            },
+            {
+              id: 'mt_close',
+              type: 'ActionButton',
+              layout: { span: 6 },
+              props: { label: 'Cerrar', variant: 'outline', fullWidth: true },
+              events: { onClick: [{ type: 'closeModal', target: 'm_turno' }] },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'calendario',
+      path: '/calendario',
+      title: 'Calendario',
+      icon: 'CalendarDays',
+      children: [
+        { id: 'cal1', type: 'PageHeader', props: { title: 'Calendario', subtitle: 'Todos los turnos de la semana o del mes' } },
+        {
+          id: 'cal2',
+          type: 'Calendar',
+          props: { title: 'Turnos', query: 'bookings', dateField: 'date', timeField: 'time', titleField: 'customer', statusField: 'status', view: 'week' },
+          events: { onEventClick: [{ type: 'toast', message: '{{row.customer}} · {{row.court}} · {{row.status}}', tone: 'info' }] },
+        },
+      ],
+    },
+    {
+      id: 'reportes',
+      path: '/reportes',
+      title: 'Reportes',
+      icon: 'BarChart3',
+      children: [
+        { id: 'r1', type: 'PageHeader', props: { title: 'Reportes', subtitle: 'Cómo viene el club' } },
+        { id: 'r2', type: 'Chart', layout: { span: 7 }, props: { title: 'Facturación por cancha', query: 'bookings', chartType: 'bar', labelField: 'court', aggregate: 'sum', valueField: 'amount', dateGroup: 'none', height: 240 } },
+        { id: 'r3', type: 'Chart', layout: { span: 5 }, props: { title: 'Turnos por estado', query: 'bookings', chartType: 'donut', labelField: 'status', aggregate: 'count', dateGroup: 'none', height: 240 } },
+        { id: 'r4', type: 'Chart', layout: { span: 8 }, props: { title: 'Ingresos por día', query: 'bookings', chartType: 'area', labelField: 'date', aggregate: 'sum', valueField: 'amount', dateGroup: 'day', height: 220 } },
+        { id: 'r5', type: 'Timeline', layout: { span: 4 }, props: { title: 'Últimas reservas', query: 'bookings', titleField: 'customer', descriptionField: 'court', dateField: 'date', statusField: 'status', order: 'desc', limit: 5 } },
       ],
     },
     {
@@ -261,19 +475,62 @@ export const turnosTemplate: ProjectT = Project.parse({
       children: [
         { id: 'c1', type: 'PageHeader', props: { title: 'Canchas', subtitle: 'Superficie, techo y precio por turno' } },
         {
-          id: 'c2',
-          type: 'DataTable',
-          props: {
-            title: 'Todas las canchas',
-            query: 'courts',
-            searchable: false,
-            columns: [
-              { field: 'name', label: 'Cancha' },
-              { field: 'surface', label: 'Superficie', format: 'badge' },
-              { field: 'roof', label: 'Techo' },
-              { field: 'price', label: 'Precio', format: 'number' },
-            ],
-          },
+          id: 'c_tabs',
+          type: 'Tabs',
+          props: { variant: 'underline' },
+          children: [
+            {
+              id: 'c_list',
+              type: 'Section',
+              props: { title: 'Listado', card: false },
+              children: [
+                {
+                  id: 'c2',
+                  type: 'DataTable',
+                  props: {
+                    title: 'Todas las canchas',
+                    query: 'courts',
+                    searchable: false,
+                    columns: [
+                      { field: 'name', label: 'Cancha' },
+                      { field: 'surface', label: 'Superficie', format: 'badge' },
+                      { field: 'roof', label: 'Techo' },
+                      { field: 'price', label: 'Precio', format: 'money' },
+                    ],
+                  },
+                },
+              ],
+            },
+            {
+              id: 'c_new',
+              type: 'Section',
+              props: { title: 'Nueva cancha', card: false },
+              children: [
+                {
+                  id: 'c3',
+                  type: 'EntityForm',
+                  layout: { span: 6 },
+                  props: {
+                    title: 'Nueva cancha',
+                    submitLabel: 'Agregar',
+                    fields: [
+                      { name: 'name', label: 'Nombre', type: 'text', required: true, span: 2 },
+                      { name: 'surface', label: 'Superficie', type: 'select', options: 'Césped sintético, Cemento, Polvo de ladrillo' },
+                      { name: 'roof', label: 'Techo', type: 'select', options: 'Techada, Descubierta' },
+                      { name: 'price', label: 'Precio por turno', type: 'number', min: 0, required: true },
+                    ],
+                  },
+                  events: {
+                    onSubmit: [
+                      { type: 'callQuery', query: 'createCourt', body: 'values' },
+                      { type: 'toast', message: '{{values.name}} agregada', tone: 'success' },
+                      { type: 'refresh' },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
         },
       ],
     },

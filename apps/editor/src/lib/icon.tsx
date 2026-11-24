@@ -1,8 +1,8 @@
-import { Code, Briefcase, CalendarDays, FormInput, Gauge, Heading, LayoutDashboard, MousePointerClick, Settings, Table, Users, BarChart3, type LucideIcon } from 'lucide-react'
+import { Code, Briefcase, CalendarDays, FormInput, Gauge, Heading, LayoutDashboard, MousePointerClick, Settings, Table, Users, BarChart3, History, LayoutGrid, SquareDashed, PanelTop, AppWindow, ListFilter, type LucideIcon } from 'lucide-react'
 
-const icons: Record<string, LucideIcon> = { Code, Briefcase, CalendarDays, FormInput, Gauge, Heading, LayoutDashboard, MousePointerClick, Settings, Table, Users, BarChart3 }
+const icons: Record<string, LucideIcon> = { Code, Briefcase, CalendarDays, FormInput, Gauge, Heading, LayoutDashboard, MousePointerClick, Settings, Table, Users, BarChart3, History, LayoutGrid, SquareDashed, PanelTop, AppWindow, ListFilter }
 
-export const pageIcons = ['LayoutDashboard', 'Users', 'Briefcase', 'BarChart3', 'CalendarDays', 'Settings']
+export const pageIcons = ['LayoutDashboard', 'LayoutGrid', 'Users', 'Briefcase', 'BarChart3', 'CalendarDays', 'Settings']
 
 export function Icon({ name, className }: { name: string; className?: string }) {
   const C = icons[name] ?? LayoutDashboard

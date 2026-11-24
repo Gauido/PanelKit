@@ -50,3 +50,11 @@ export function kebab(input: string): string {
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'page'
 }
+
+/** True when a value (or anything inside it) has a {{...}} placeholder. */
+export function hasTemplate(value: unknown): boolean {
+  if (typeof value === 'string') return value.includes('{{')
+  if (Array.isArray(value)) return value.some(hasTemplate)
+  if (value && typeof value === 'object') return Object.values(value).some(hasTemplate)
+  return false
+}

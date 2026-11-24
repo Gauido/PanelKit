@@ -19,14 +19,20 @@ Tools like Retool, Appsmith or ToolJet are great until you want to leave: your a
 
 - **Projects home and a 2-step wizard:** pick a template (CRM, Turnos y reservas, En blanco) and a style, and start building. Projects are saved in your browser.
 - **Drag & drop canvas** on a 12-column grid, multiple pages, undo/redo, keyboard shortcuts (press `?`).
-- **Blocks:** KPI card (animated count-up), data table (search, sort, pagination), form (validations: required, min/max, length, regex, custom message), button, page header.
+- **Blocks:** KPI card (animated count-up), data table (search, sort, pagination, quick filters, edit/delete per row), form (12 field types; validations: required, min/max, length, regex, custom message), charts (bar, line, area, donut), calendar (week/month), availability grid for bookings, activity timeline, button, page header, free HTML.
 - **Data:** start with **sample data** stored in the project (no API needed; it exports as an in-memory API), or add a REST API, test a query, and PanelKit infers the fields so you map them with dropdowns. Secrets stay as `{{env.API_TOKEN}}` and end up in `.env.example`.
-- **Events:** each block exposes events (`onSubmit`, `onRowClick`, `onClick`) that run a list of actions: call an API, navigate, show a toast, refresh data, open a link.
+- **Events:** each block exposes events (`onSubmit`, `onRowClick`, `onRowDelete`, `onSlotClick`, `onEventClick`…) that run a list of actions: ask for confirmation, call an API, navigate, show a toast, refresh data, open a link.
 - **Style:** 6 ready-made styles (Moderno, Cancha, Océano, Minimal, Atardecer, Tecno), any primary color, 7 fonts, radius, warm/neutral/cool surfaces, light/dark, and an animation level (none, subtle, normal, playful). Per-block spacing, background, alignment, shadow or raw Tailwind classes.
 - **Style frameworks and packages:** add Bootstrap, Bulma, Pico, Animate.css or daisyUI in one click, or search npm. CSS packages show live in the editor and are imported in the export; everything lands in `package.json`.
 - **Full control:** a global custom CSS editor and a **free HTML block** where any Tailwind or framework class works, live.
 - **Everything is JSON.** The whole app is one `panelkit.json` you can read, edit, paste or version.
 - **Modern defaults:** Tailwind v4 tokens in OKLCH, Inter, Motion animations (staggered entrance, page transitions, animated numbers, toasts, skeletons).
+
+## Bookings panel, built with blocks
+
+![Availability grid, quick filters and row actions](docs/agenda-turnos.png)
+
+![Charts and activity timeline](docs/reportes.png)
 
 ## The exported app
 
@@ -76,14 +82,7 @@ Adding a block = one component in `packages/blocks` + one entry in `packages/exp
 
 ## Roadmap
 
-- [x] Canvas, pages, REST data, field mapping, events, validations, styles, JSON view, export
-- [x] Projects home, templates, style presets, fonts, animation levels, npm packages, custom CSS, HTML block, sample data
-- [ ] Charts (line, bar, area, pie, then the rest), tabs, modal, alerts, badges
-- [ ] Calendar, kanban, contacts and tasks modules; page templates (profile, invoice, pricing)
-- [ ] Optional backend for direct database connections (Postgres, MySQL, Supabase)
-- [ ] Auth and roles in exported apps
-- [ ] Angular export target
-- [ ] English UI
+See [ROADMAP.md](ROADMAP.md). Next up: record detail and modals, tabs, kanban, login and roles, `npx panelkit` working on a JSON file in your repo, and a runtime that renders the JSON without exporting.
 
 ## Contributing
 

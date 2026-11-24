@@ -1,6 +1,6 @@
 import { CheckCircle2, Loader2, Play, Plus, Trash2, XCircle } from 'lucide-react'
 import { useState } from 'react'
-import { envVars, inferFields, newId, type Query } from '@panelkit/schema'
+import { envVars, inferFields, newId, walkNodes, type Query } from '@panelkit/schema'
 import { toRows } from '@panelkit/blocks'
 import { Field, IconButton, Section, Select, TextInput } from '../lib/ui'
 import { apiFor } from '../lib/actions'
@@ -37,7 +37,7 @@ function QueryRow({ q, index }: { q: Query; index: number }) {
             update((d) => {
               d.queries[index]!.id = id
               for (const p of d.pages)
-                for (const n of p.children) {
+                for (const n of walkNodes(p.children)) {
                   if (n.props.query === old) n.props.query = id
                   for (const list of Object.values(n.events)) for (const a of list) if (a.type === 'callQuery' && a.query === old) a.query = id
                 }
