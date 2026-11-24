@@ -46,7 +46,7 @@ export function Palette() {
         </div>
       ))}
       <p className="rounded-lg bg-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
-        Próximamente: gráficos, calendario, kanban, tabs, modales y el resto del catálogo.
+        Próximamente: kanban, pestañas, detalle de registro, login, roles y el resto del catálogo.
       </p>
     </div>
   )

@@ -41,7 +41,9 @@ export const Layout = z.object({
 
 /** What happens when an event fires. Strings accept {{values.x}} / {{row.x}} templates. */
 export const Action = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('callQuery'), query: z.string(), body: z.enum(['values', 'row', 'none']).default('values') }),
+  z.object({ type: z.literal('callQuery'), query: z.string(), body: z.enum(['values', 'row', 'slot', 'day', 'none']).default('values') }),
+  /** Asks the user; when they cancel, the remaining actions do not run. */
+  z.object({ type: z.literal('confirm'), message: z.string() }),
   z.object({ type: z.literal('navigate'), to: z.string() }),
   z.object({ type: z.literal('toast'), message: z.string(), tone: z.enum(['success', 'error', 'info']).default('success') }),
   z.object({ type: z.literal('refresh') }),

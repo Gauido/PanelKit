@@ -1,10 +1,10 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { BarChart3, Briefcase, CalendarDays, LayoutDashboard, Moon, Settings, Sun, Users, type LucideIcon } from 'lucide-react'
+import { BarChart3, Briefcase, CalendarDays, LayoutDashboard, LayoutGrid, Moon, Settings, Sun, Users, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { cn } from '../lib/utils'
 
-const icons: Record<string, LucideIcon> = { LayoutDashboard, Users, Briefcase, BarChart3, CalendarDays, Settings }
+const icons: Record<string, LucideIcon> = { LayoutDashboard, LayoutGrid, Users, Briefcase, BarChart3, CalendarDays, Settings }
 
 export type NavItem = { path: string; title: string; icon?: string }
 

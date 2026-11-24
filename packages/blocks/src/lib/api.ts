@@ -41,7 +41,7 @@ export function createMockApi(tables: Record<string, Record<string, unknown>[]>,
       const find = () => rows.findIndex((r) => String(r.id) === id)
       switch (method.toUpperCase()) {
         case 'GET':
-          return (id ? rows[find()] : rows) as T
+          return structuredClone(id ? rows[find()] : rows) as T
         case 'POST': {
           const row = { id: rows.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0) + 1, ...(body as object) }
           rows.unshift(row)

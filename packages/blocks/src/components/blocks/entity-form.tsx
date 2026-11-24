@@ -9,7 +9,7 @@ import { cn } from '../../lib/utils'
 export type FormField = {
   name: string
   label: string
-  type?: 'text' | 'email' | 'number' | 'date' | 'textarea' | 'select' | 'checkbox'
+  type?: 'text' | 'email' | 'number' | 'date' | 'time' | 'datetime-local' | 'tel' | 'url' | 'password' | 'textarea' | 'select' | 'checkbox'
   required?: boolean
   /** Comma separated, for "select". */
   options?: string

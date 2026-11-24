@@ -83,9 +83,12 @@ function PropEditor({ node, f }: { node: Node; f: PropField }) {
                 options={[
                   { value: 'text', label: 'Texto' },
                   { value: 'number', label: 'Número' },
-                  { value: 'badge', label: 'Etiqueta de color' },
+                  { value: 'money', label: 'Dinero' },
+                  { value: 'badge', label: 'Estado (etiqueta de color)' },
+                  { value: 'boolean', label: 'Sí / No' },
                   { value: 'email', label: 'Email' },
                   { value: 'date', label: 'Fecha' },
+                  { value: 'datetime', label: 'Fecha y hora' },
                 ]}
               />
             </div>
@@ -104,6 +107,22 @@ function PropEditor({ node, f }: { node: Node; f: PropField }) {
   }
 }
 
+const fieldTypes = [
+  { value: 'text', label: 'Texto' },
+  { value: 'textarea', label: 'Texto largo' },
+  { value: 'email', label: 'Email' },
+  { value: 'tel', label: 'Teléfono' },
+  { value: 'number', label: 'Número' },
+  { value: 'date', label: 'Fecha' },
+  { value: 'time', label: 'Hora' },
+  { value: 'datetime-local', label: 'Fecha y hora' },
+  { value: 'select', label: 'Lista de opciones' },
+  { value: 'checkbox', label: 'Casilla (sí / no)' },
+  { value: 'url', label: 'Enlace' },
+  { value: 'password', label: 'Contraseña' },
+]
+const typeLabel = (t?: string) => fieldTypes.find((x) => x.value === (t ?? 'text'))?.label ?? t
+
 function FormFieldsEditor({ value, onChange }: { value: FF[]; onChange: (v: FF[]) => void }) {
   const [open, setOpen] = useState<number | null>(null)
   const patch = (i: number, p: FF) => onChange(value.map((x, j) => (j === i ? { ...x, ...p } : x)))
@@ -118,7 +137,7 @@ function FormFieldsEditor({ value, onChange }: { value: FF[]; onChange: (v: FF[]
           <button className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-[13px]" onClick={() => setOpen(open === i ? null : i)}>
             <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', open !== i && '-rotate-90')} />
             <span className="flex-1 truncate">{f.label}</span>
-            <span className="text-[11px] text-muted-foreground">{f.type}{f.required ? ' · obligatorio' : ''}</span>
+            <span className="text-[11px] text-muted-foreground">{typeLabel(f.type)}{f.required ? ' · obligatorio' : ''}</span>
           </button>
           {open === i && (
             <div className="grid grid-cols-2 gap-2 border-t border-border p-2">
@@ -128,7 +147,7 @@ function FormFieldsEditor({ value, onChange }: { value: FF[]; onChange: (v: FF[]
                 <Select
                   value={f.type ?? 'text'}
                   onChange={(e) => patch(i, { type: e.target.value })}
-                  options={['text', 'email', 'number', 'date', 'textarea', 'select', 'checkbox'].map((t) => ({ value: t, label: t }))}
+                  options={fieldTypes}
                 />
               </Field>
               <Field label="Ancho">
@@ -140,7 +159,7 @@ function FormFieldsEditor({ value, onChange }: { value: FF[]; onChange: (v: FF[]
               <label className="col-span-2 flex items-center gap-2 text-[13px]">
                 <input type="checkbox" className="accent-[var(--color-primary)]" checked={Boolean(f.required)} onChange={(e) => patch(i, { required: e.target.checked })} /> Obligatorio
               </label>
-              {(f.type === 'text' || f.type === 'textarea' || f.type === 'email' || !f.type) && (
+              {(f.type === 'text' || f.type === 'textarea' || f.type === 'email' || f.type === 'tel' || f.type === 'password' || !f.type) && (
                 <>
                   <Field label="Mín. caracteres"><TextInput type="number" value={f.minLength ?? ''} onChange={(e) => patch(i, { minLength: e.target.value ? Number(e.target.value) : undefined })} /></Field>
                   <Field label="Máx. caracteres"><TextInput type="number" value={f.maxLength ?? ''} onChange={(e) => patch(i, { maxLength: e.target.value ? Number(e.target.value) : undefined })} /></Field>
@@ -152,7 +171,7 @@ function FormFieldsEditor({ value, onChange }: { value: FF[]; onChange: (v: FF[]
                   <Field label="Máximo"><TextInput type="number" value={f.max ?? ''} onChange={(e) => patch(i, { max: e.target.value ? Number(e.target.value) : undefined })} /></Field>
                 </>
               )}
-              {(f.type === 'text' || !f.type) && (
+              {(f.type === 'text' || f.type === 'tel' || !f.type) && (
                 <div className="col-span-2"><Field label="Formato (expresión regular)" hint="Ej: [0-9]{8} para 8 dígitos"><TextInput value={f.pattern ?? ''} onChange={(e) => patch(i, { pattern: e.target.value || undefined })} /></Field></div>
               )}
               <div className="col-span-2"><Field label="Mensaje si no es válido"><TextInput value={f.message ?? ''} onChange={(e) => patch(i, { message: e.target.value || undefined })} /></Field></div>
@@ -169,15 +188,24 @@ function FormFieldsEditor({ value, onChange }: { value: FF[]; onChange: (v: FF[]
 
 const actionLabels: Record<Action['type'], string> = {
   callQuery: 'Llamar a la API',
+  confirm: 'Pedir confirmación',
   navigate: 'Ir a una página',
   toast: 'Mostrar un aviso',
   refresh: 'Recargar datos',
   openUrl: 'Abrir un enlace',
 }
 
+const argLabels: Record<string, string> = {
+  values: 'Enviar los datos del formulario',
+  row: 'Enviar la fila',
+  slot: 'Enviar el turno (recurso, fecha, hora)',
+  day: 'Enviar el día',
+}
+
 function defaultAction(type: Action['type'], firstQuery: string, firstPath: string): Action {
   switch (type) {
     case 'callQuery': return { type, query: firstQuery, body: 'values' }
+    case 'confirm': return { type, message: '¿Seguro?' }
     case 'navigate': return { type, to: firstPath }
     case 'toast': return { type, message: 'Listo', tone: 'success' }
     case 'refresh': return { type }
@@ -211,7 +239,7 @@ function EventsEditor({ node }: { node: Node }) {
                     <>
                       <Select value={a.query} onChange={(e) => patch(i, { query: e.target.value })} options={project.queries.map((q) => ({ value: q.id, label: `${q.method} ${q.path}` }))} />
                       {ev.arg && (
-                        <Select value={a.body} onChange={(e) => patch(i, { body: e.target.value as 'values' })} options={[{ value: ev.arg, label: ev.arg === 'values' ? 'Enviar los datos del formulario' : 'Enviar la fila' }, { value: 'none', label: 'Sin cuerpo' }]} />
+                        <Select value={a.body === 'none' ? 'none' : ev.arg} onChange={(e) => patch(i, { body: e.target.value as 'values' })} options={[{ value: ev.arg, label: argLabels[ev.arg] ?? ev.arg }, { value: 'none', label: 'Sin cuerpo' }]} />
                       )}
                     </>
                   )}
@@ -222,6 +250,7 @@ function EventsEditor({ node }: { node: Node }) {
                       <Select value={a.tone} onChange={(e) => patch(i, { tone: e.target.value as 'success' })} options={[{ value: 'success', label: 'Éxito' }, { value: 'info', label: 'Info' }, { value: 'error', label: 'Error' }]} />
                     </div>
                   )}
+                  {a.type === 'confirm' && <TextInput value={a.message} onChange={(e) => patch(i, { message: e.target.value })} />}
                   {a.type === 'openUrl' && <TextInput value={a.url} onChange={(e) => patch(i, { url: e.target.value })} />}
                 </li>
               ))}
