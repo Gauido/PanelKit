@@ -1,8 +1,8 @@
 import { ChevronDown, MousePointer2, Plus, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@panelkit/blocks'
-import { registry, type PropField } from '@panelkit/exporter'
-import type { Action, Node, Style } from '@panelkit/schema'
+import { registry, spansFor, type PropField } from '@panelkit/exporter'
+import { walkNodes, type Action, type Node, type Style } from '@panelkit/schema'
 import { Field, IconButton, Section, Select, TextInput, fieldClass } from '../lib/ui'
 import { useEditor, useSelectedNode } from '../store'
 
@@ -125,6 +125,9 @@ const typeLabel = (t?: string) => fieldTypes.find((x) => x.value === (t ?? 'text
 
 function FormFieldsEditor({ value, onChange }: { value: FF[]; onChange: (v: FF[]) => void }) {
   const [open, setOpen] = useState<number | null>(null)
+  const queries = useEditor((s) => s.project.queries)
+  const getQueries = queries.filter((q) => q.method === 'GET')
+  const fieldsOf = (id: string) => queries.find((q) => q.id === id)?.fields ?? []
   const patch = (i: number, p: FF) => onChange(value.map((x, j) => (j === i ? { ...x, ...p } : x)))
   return (
     <div className="grid gap-2">
@@ -154,7 +157,20 @@ function FormFieldsEditor({ value, onChange }: { value: FF[]; onChange: (v: FF[]
                 <Select value={String(f.span ?? 1)} onChange={(e) => patch(i, { span: Number(e.target.value) })} options={[{ value: '1', label: 'Media fila' }, { value: '2', label: 'Fila completa' }]} />
               </Field>
               {f.type === 'select' && (
-                <div className="col-span-2"><Field label="Opciones (separadas por coma)"><TextInput value={f.options ?? ''} onChange={(e) => patch(i, { options: e.target.value })} /></Field></div>
+                <>
+                  <div className="col-span-2"><Field label="Opciones fijas (separadas por coma)"><TextInput value={f.options ?? ''} onChange={(e) => patch(i, { options: e.target.value })} /></Field></div>
+                  <div className="col-span-2">
+                    <Field label="Opciones desde la API" hint="Si agregás registros, aparecen solos en la lista.">
+                      <Select value={f.optionsQuery ?? ''} onChange={(e) => patch(i, { optionsQuery: e.target.value || undefined })} options={[{ value: '', label: 'No' }, ...getQueries.map((q) => ({ value: q.id, label: `${q.id}  ${q.path}` }))]} />
+                    </Field>
+                  </div>
+                  {f.optionsQuery && (
+                    <>
+                      <Field label="Mostrar"><Select value={f.optionLabel ?? ''} onChange={(e) => patch(i, { optionLabel: e.target.value })} options={[{ value: '', label: '—' }, ...fieldsOf(f.optionsQuery).map((x) => ({ value: x, label: x }))]} /></Field>
+                      <Field label="Guardar"><Select value={f.optionValue ?? ''} onChange={(e) => patch(i, { optionValue: e.target.value })} options={[{ value: '', label: '—' }, ...fieldsOf(f.optionsQuery).map((x) => ({ value: x, label: x }))]} /></Field>
+                    </>
+                  )}
+                </>
               )}
               <label className="col-span-2 flex items-center gap-2 text-[13px]">
                 <input type="checkbox" className="accent-[var(--color-primary)]" checked={Boolean(f.required)} onChange={(e) => patch(i, { required: e.target.checked })} /> Obligatorio
@@ -189,6 +205,10 @@ function FormFieldsEditor({ value, onChange }: { value: FF[]; onChange: (v: FF[]
 const actionLabels: Record<Action['type'], string> = {
   callQuery: 'Llamar a la API',
   confirm: 'Pedir confirmación',
+  setState: 'Guardar en una variable',
+  openModal: 'Abrir modal / panel',
+  closeModal: 'Cerrar modal / panel',
+  runCode: 'Ejecutar código propio',
   navigate: 'Ir a una página',
   toast: 'Mostrar un aviso',
   refresh: 'Recargar datos',
@@ -206,6 +226,10 @@ function defaultAction(type: Action['type'], firstQuery: string, firstPath: stri
   switch (type) {
     case 'callQuery': return { type, query: firstQuery, body: 'values' }
     case 'confirm': return { type, message: '¿Seguro?' }
+    case 'setState': return { type, key: 'seleccionado', value: '{{row}}' }
+    case 'openModal': return { type, target: '' }
+    case 'closeModal': return { type, target: '' }
+    case 'runCode': return { type, code: "// row, values, state, setState, apis, navigate, toast, refresh\ntoast('Hola ' + (row?.name ?? ''))" }
     case 'navigate': return { type, to: firstPath }
     case 'toast': return { type, message: 'Listo', tone: 'success' }
     case 'refresh': return { type }
@@ -218,6 +242,8 @@ function EventsEditor({ node }: { node: Node }) {
   const def = registry[node.type]!
   if (!def.events.length) return <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">Este bloque no dispara eventos.</p>
   const writeQueries = project.queries.filter((q) => q.method !== 'GET')
+  const page = project.pages.find((pg) => [...walkNodes(pg.children)].some((n) => n.id === node.id)) ?? project.pages[0]!
+  const modals = [...walkNodes(page.children)].filter((n) => n.type === 'Modal').map((n) => ({ value: n.id, label: String(n.props.title ?? 'Modal') }))
   return (
     <>
       {def.events.map((ev) => {
@@ -251,6 +277,29 @@ function EventsEditor({ node }: { node: Node }) {
                     </div>
                   )}
                   {a.type === 'confirm' && <TextInput value={a.message} onChange={(e) => patch(i, { message: e.target.value })} />}
+                  {a.type === 'setState' && (
+                    <div className="grid grid-cols-[1fr_1.3fr] gap-2">
+                      <TextInput value={a.key} placeholder="variable" aria-label="Nombre de la variable" onChange={(e) => patch(i, { key: e.target.value.replace(/[^a-zA-Z0-9_]/g, '') })} />
+                      <TextInput value={a.value} placeholder={ev.arg ? `{{${ev.arg}}}` : 'valor'} aria-label="Valor" onChange={(e) => patch(i, { value: e.target.value })} />
+                      <p className="col-span-2 text-[11px] text-muted-foreground">Después usala en cualquier texto, consulta o formulario como <code className="rounded bg-muted px-1">{`{{state.${a.key || 'variable'}}}`}</code>.</p>
+                    </div>
+                  )}
+                  {(a.type === 'openModal' || a.type === 'closeModal') && (
+                    modals.length ? (
+                      <Select value={a.target} onChange={(e) => patch(i, { target: e.target.value })} options={[{ value: '', label: 'Elegir modal…' }, ...modals]} />
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">Agregá un bloque “Modal / panel” a esta página primero.</p>
+                    )
+                  )}
+                  {a.type === 'runCode' && (
+                    <textarea
+                      spellCheck={false}
+                      className={cn(fieldClass, 'h-32 py-2 font-mono text-[11px] leading-relaxed')}
+                      value={a.code}
+                      onChange={(e) => patch(i, { code: e.target.value })}
+                      aria-label="Código"
+                    />
+                  )}
                   {a.type === 'openUrl' && <TextInput value={a.url} onChange={(e) => patch(i, { url: e.target.value })} />}
                 </li>
               ))}
@@ -268,15 +317,64 @@ function EventsEditor({ node }: { node: Node }) {
   )
 }
 
+const deviceRows = [
+  { id: 'desktop', label: 'Escritorio', key: 'span' },
+  { id: 'tablet', label: 'Tablet', key: 'spanTablet' },
+  { id: 'mobile', label: 'Celular', key: 'spanMobile' },
+] as const
+
+/** Width per device and where the block is hidden. */
+function ResponsiveEditor({ node }: { node: Node }) {
+  const updateNode = useEditor((s) => s.updateNode)
+  const spans = spansFor(node.layout)
+  const hidden = new Set(node.layout.hide ?? [])
+  return (
+    <div className="grid gap-2">
+      <span className="text-xs font-medium text-muted-foreground">Ancho y visibilidad por pantalla (de 12 columnas)</span>
+      {deviceRows.map((d) => (
+        <div key={d.id} className="grid grid-cols-[72px_1fr_28px_auto] items-center gap-2 text-[12px]">
+          <span>{d.label}</span>
+          <input
+            type="range"
+            min={1}
+            max={12}
+            value={spans[d.id]}
+            disabled={hidden.has(d.id)}
+            aria-label={`Ancho en ${d.label}`}
+            onChange={(e) => updateNode(node.id, (n) => void (n.layout[d.key] = Number(e.target.value)))}
+            className="accent-[var(--color-primary)] disabled:opacity-30"
+          />
+          <span className="text-right tabular-nums text-muted-foreground">{spans[d.id]}</span>
+          <label className="flex items-center gap-1 text-muted-foreground">
+            <input
+              type="checkbox"
+              className="accent-[var(--color-primary)]"
+              checked={hidden.has(d.id)}
+              onChange={(e) =>
+                updateNode(node.id, (n) => {
+                  const next = new Set(n.layout.hide ?? [])
+                  if (e.target.checked) next.add(d.id)
+                  else next.delete(d.id)
+                  n.layout.hide = next.size ? [...next] : undefined
+                })
+              }
+            />
+            Ocultar
+          </label>
+        </div>
+      ))}
+      <p className="text-[11px] text-muted-foreground">Tip: elegí Tablet o Celular arriba y usá − / + en el bloque para ajustar ese tamaño.</p>
+    </div>
+  )
+}
+
 function StyleEditor({ node }: { node: Node }) {
   const updateNode = useEditor((s) => s.updateNode)
   const set = (p: Partial<Style>) => updateNode(node.id, (n) => void (n.style = { ...n.style, ...p }))
   const opt = (pairs: [string, string][]) => [{ value: '', label: 'Por defecto' }, ...pairs.map(([value, label]) => ({ value, label }))]
   return (
     <Section title="Estilo">
-      <Field label={`Ancho: ${node.layout.span} de 12 columnas`}>
-        <input type="range" min={1} max={12} value={node.layout.span} onChange={(e) => updateNode(node.id, (n) => void (n.layout.span = Number(e.target.value)))} className="accent-[var(--color-primary)]" />
-      </Field>
+      <ResponsiveEditor node={node} />
       <Field label="Espaciado interno"><Select value={node.style.padding ?? ''} onChange={(e) => set({ padding: (e.target.value || undefined) as Style['padding'] })} options={opt([['none', 'Ninguno'], ['sm', 'Chico'], ['md', 'Medio'], ['lg', 'Grande']])} /></Field>
       <Field label="Fondo"><Select value={node.style.background ?? ''} onChange={(e) => set({ background: (e.target.value || undefined) as Style['background'] })} options={opt([['muted', 'Gris suave'], ['primary', 'Color principal'], ['transparent', 'Transparente']])} /></Field>
       <Field label="Alineación"><Select value={node.style.align ?? ''} onChange={(e) => set({ align: (e.target.value || undefined) as Style['align'] })} options={opt([['left', 'Izquierda'], ['center', 'Centro'], ['right', 'Derecha']])} /></Field>

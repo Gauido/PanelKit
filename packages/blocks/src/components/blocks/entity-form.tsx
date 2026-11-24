@@ -1,10 +1,10 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { CheckCircle2, Loader2 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input, inputClass } from '../ui/input'
-import { cn } from '../../lib/utils'
+import { cn, getPath, toRows } from '../../lib/utils'
 
 export type FormField = {
   name: string
@@ -13,6 +13,10 @@ export type FormField = {
   required?: boolean
   /** Comma separated, for "select". */
   options?: string
+  /** For "select": take the options from a query instead (its id), showing `optionLabel` and saving `optionValue`. */
+  optionsQuery?: string
+  optionLabel?: string
+  optionValue?: string
   span?: 1 | 2
   placeholder?: string
   minLength?: number
@@ -44,10 +48,35 @@ export type EntityFormProps = {
   description?: string
   fields: FormField[]
   submitLabel?: string
+  /** Pre-fills the form, e.g. with the row being edited. */
+  initialValues?: Record<string, unknown> | null
+  /** Rows of each query used by `optionsQuery`, keyed by query id. */
+  optionData?: Record<string, unknown>
+  /** Clear the fields after a successful submit (default: only when there are no initial values). */
+  resetOnSubmit?: boolean
   onSubmit?: (values: Record<string, unknown>) => Promise<unknown> | void
 }
 
-export function EntityForm({ title, description, fields, submitLabel = 'Guardar', onSubmit }: EntityFormProps) {
+function selectOptions(f: FormField, optionData: Record<string, unknown> | undefined) {
+  const fixed = (f.options ?? '').split(',').map((o) => o.trim()).filter(Boolean).map((o) => ({ label: o, value: o }))
+  if (!f.optionsQuery) return fixed
+  const rows = toRows(optionData?.[f.optionsQuery])
+  return [
+    ...fixed,
+    ...rows.map((r) => {
+      const value = String(getPath(r, f.optionValue || f.optionLabel || 'id') ?? '')
+      return { label: String(getPath(r, f.optionLabel || f.optionValue || 'name') ?? value), value }
+    }),
+  ]
+}
+
+export function EntityForm({ title, description, fields, submitLabel = 'Guardar', initialValues, optionData, resetOnSubmit, onSubmit }: EntityFormProps) {
+  const initial = initialValues && typeof initialValues === 'object' ? initialValues : undefined
+  const formKey = useMemo(() => JSON.stringify(initial ?? {}), [initial])
+  const dv = (name: string) => {
+    const v = initial?.[name]
+    return v === undefined || v === null ? undefined : String(v)
+  }
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [message, setMessage] = useState('')
 
@@ -64,7 +93,7 @@ export function EntityForm({ title, description, fields, submitLabel = 'Guardar'
     try {
       await onSubmit?.(values)
       setStatus('saved')
-      el.reset()
+      if (resetOnSubmit ?? !initial) el.reset()
       setTimeout(() => setStatus('idle'), 2500)
     } catch (err) {
       setStatus('error')
@@ -73,12 +102,12 @@ export function EntityForm({ title, description, fields, submitLabel = 'Guardar'
   }
 
   return (
-    <Card className="p-5">
+    <Card className="@container p-5">
       {title && <h3 className="font-semibold tracking-tight">{title}</h3>}
       {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
-      <form onSubmit={handleSubmit} className="mt-4 grid gap-4 sm:grid-cols-2">
+      <form key={formKey} onSubmit={handleSubmit} className="mt-4 grid gap-4 @md:grid-cols-2">
         {fields.map((f) => (
-          <label key={f.name} className={cn('grid min-w-0 gap-1.5 text-sm', (f.span === 2 || f.type === 'textarea') && 'sm:col-span-2', f.type === 'checkbox' && 'flex items-center gap-2')}>
+          <label key={f.name} className={cn('grid min-w-0 gap-1.5 text-sm', (f.span === 2 || f.type === 'textarea') && '@md:col-span-2', f.type === 'checkbox' && 'flex items-center gap-2')}>
             {f.type !== 'checkbox' && (
               <span className="font-medium">
                 {f.label}
@@ -86,25 +115,25 @@ export function EntityForm({ title, description, fields, submitLabel = 'Guardar'
               </span>
             )}
             {f.type === 'textarea' ? (
-              <textarea name={f.name} required={f.required} minLength={f.minLength} maxLength={f.maxLength} placeholder={f.placeholder} onInvalid={rules(f).onInvalid} onInput={rules(f).onInput} rows={3} className={cn(inputClass, 'h-auto py-2')} />
+              <textarea name={f.name} defaultValue={dv(f.name)} required={f.required} minLength={f.minLength} maxLength={f.maxLength} placeholder={f.placeholder} onInvalid={rules(f).onInvalid} onInput={rules(f).onInput} rows={3} className={cn(inputClass, 'h-auto py-2')} />
             ) : f.type === 'select' ? (
-              <select name={f.name} required={f.required} onInvalid={rules(f).onInvalid} onChange={rules(f).onInput} className={inputClass} defaultValue="">
+              <select name={f.name} required={f.required} onInvalid={rules(f).onInvalid} onChange={rules(f).onInput} className={inputClass} defaultValue={dv(f.name) ?? ''}>
                 <option value="" disabled>Elegir…</option>
-                {(f.options ?? '').split(',').map((o) => o.trim()).filter(Boolean).map((o) => (
-                  <option key={o} value={o}>{o}</option>
+                {selectOptions(f, optionData).map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
             ) : f.type === 'checkbox' ? (
               <>
-                <input type="checkbox" name={f.name} className="size-4 accent-[var(--color-primary)]" />
+                <input type="checkbox" name={f.name} defaultChecked={Boolean(initial?.[f.name])} className="size-4 accent-[var(--color-primary)]" />
                 <span className="font-medium">{f.label}</span>
               </>
             ) : (
-              <Input name={f.name} type={f.type ?? 'text'} {...rules(f)} />
+              <Input name={f.name} type={f.type ?? 'text'} defaultValue={dv(f.name)} {...rules(f)} />
             )}
           </label>
         ))}
-        <div className="flex items-center gap-3 sm:col-span-2">
+        <div className="flex items-center gap-3 @md:col-span-2">
           <Button type="submit" disabled={status === 'saving'}>
             {status === 'saving' && <Loader2 className="size-4 animate-spin" />}
             {submitLabel}

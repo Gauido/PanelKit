@@ -26,7 +26,7 @@ export function createApi(baseUrl: string, headers: Record<string, string> = {})
 
 /**
  * An API backed by sample data kept in memory. GET /name returns a collection,
- * POST/PUT/PATCH/DELETE /name[/id] change it until the page reloads.
+ * GET /name?field=value filters it, POST/PUT/PATCH/DELETE /name[/id] change it until the page reloads.
  */
 export function createMockApi(tables: Record<string, Record<string, unknown>[]>, name = 'mock'): Api {
   const db: Record<string, Record<string, unknown>[]> = structuredClone(tables)
@@ -36,12 +36,16 @@ export function createMockApi(tables: Record<string, Record<string, unknown>[]>,
     headers: {},
     async request<T>(method: string, path: string, body?: unknown): Promise<T> {
       await delay()
-      const [table = '', id] = path.replace(/^\/+/, '').split('/')
+      const [route = '', search = ''] = path.split('?')
+      const [table = '', id] = route.replace(/^\/+/, '').split('/')
       const rows = (db[table] ??= [])
+      // "/bookings?court=Cancha 1&status=" keeps rows that match every non-empty param.
+      const filters = [...new URLSearchParams(search)].filter(([, v]) => v !== '')
       const find = () => rows.findIndex((r) => String(r.id) === id)
       switch (method.toUpperCase()) {
         case 'GET':
-          return structuredClone(id ? rows[find()] : rows) as T
+          if (id) return structuredClone(rows[find()]) as T
+          return structuredClone(rows.filter((r) => filters.every(([k, v]) => String(r[k] ?? '') === v))) as T
         case 'POST': {
           const row = { id: rows.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0) + 1, ...(body as object) }
           rows.unshift(row)

@@ -1,10 +1,60 @@
 import { create } from 'zustand'
-import { crmTemplate, newId, Project, templates, type Node, type Page } from '@panelkit/schema'
-import { registry } from '@panelkit/exporter'
+import { crmTemplate, newId, Project, templates, walkNodes, type Node, type Page } from '@panelkit/schema'
+import { registry, type Device } from '@panelkit/exporter'
 
 const INDEX_KEY = 'panelkit:projects'
 const projectKey = (id: string) => `panelkit:project:${id}`
 const HISTORY_LIMIT = 100
+
+/** Where a dragged block lands. */
+export type DropTarget = { parentId?: string | null; beforeId?: string; afterId?: string }
+
+/** The list that holds `id` (page or container children) and its index. */
+export function locate(nodes: Node[], id: string): { list: Node[]; index: number } | null {
+  const index = nodes.findIndex((n) => n.id === id)
+  if (index >= 0) return { list: nodes, index }
+  for (const n of nodes) {
+    const hit = n.children && locate(n.children, id)
+    if (hit) return hit
+  }
+  return null
+}
+
+function findNode(nodes: Node[], id: string): Node | undefined {
+  for (const n of walkNodes(nodes)) if (n.id === id) return n
+  return undefined
+}
+
+function targetList(page: Page, target: DropTarget | undefined): { list: Node[]; index: number } {
+  if (target?.afterId) {
+    const hit = locate(page.children, target.afterId)
+    if (hit) return { list: hit.list, index: hit.index + 1 }
+  }
+  if (target?.beforeId) {
+    const hit = locate(page.children, target.beforeId)
+    if (hit) return hit
+  }
+  if (target?.parentId) {
+    const parent = findNode(page.children, target.parentId)
+    if (parent) return { list: (parent.children ??= []), index: parent.children.length }
+  }
+  return { list: page.children, index: page.children.length }
+}
+
+function freshIds(node: Node): Node {
+  return { ...node, id: newId(), children: node.children?.map(freshIds) }
+}
+
+function makeNode(type: string): Node | null {
+  const def = registry[type]
+  if (!def) return null
+  const node: Node = { id: newId(), type, layout: { span: def.defaultSpan }, props: structuredClone(def.defaultProps), style: {}, events: {} }
+  if (def.container) node.children = []
+  if (def.container === 'tabs') {
+    node.children = [1, 2].map((i) => ({ ...makeNode('Section')!, props: { title: `Pestaña ${i}`, card: false } }))
+  }
+  return node
+}
 
 export type ProjectMeta = { id: string; name: string; template: string; updatedAt: number; primary: string; font: string; pages: number; blocks: number }
 
@@ -49,7 +99,7 @@ function metaFor(id: string, template: string, p: Project): ProjectMeta {
     primary: p.theme.primary ?? p.theme.accent,
     font: p.theme.font,
     pages: p.pages.length,
-    blocks: p.pages.reduce((n, pg) => n + pg.children.length, 0),
+    blocks: p.pages.reduce((n, pg) => n + [...walkNodes(pg.children)].length, 0),
   }
 }
 
@@ -69,6 +119,9 @@ type State = {
   pageId: string
   selectedId: string | null
   preview: boolean
+  /** Screen size being designed / tested. Block widths edited on the canvas apply to it. */
+  device: Device
+  setDevice: (d: Device) => void
   /** Values for {{env.X}} used while designing. Never exported. */
   env: Record<string, string>
 
@@ -82,8 +135,9 @@ type State = {
   setPreview: (on: boolean) => void
   setEnv: (name: string, value: string) => void
 
-  addNode: (type: string, index?: number) => void
-  moveNode: (from: number, to: number) => void
+  /** Adds a block before `beforeId`, or at the end of `parentId` (a container) or of the page. */
+  addNode: (type: string, target?: DropTarget) => void
+  moveNode: (id: string, target: DropTarget) => void
   updateNode: (id: string, fn: (node: Node) => void) => void
   removeNode: (id: string) => void
   duplicateNode: (id: string) => void
@@ -166,6 +220,8 @@ export const useEditor = create<State>((set, get) => {
     pageId: initial.pages[0]!.id,
     selectedId: null,
     preview: false,
+    device: 'desktop',
+    setDevice: (device) => set({ device }),
     env: {},
 
     setProject: (next) => {
@@ -197,49 +253,60 @@ export const useEditor = create<State>((set, get) => {
     setPreview: (on) => set({ preview: on, selectedId: null }),
     setEnv: (name, value) => set({ env: { ...get().env, [name]: value } }),
 
-    addNode: (type, index) => {
-      const def = registry[type]
-      if (!def) return
-      const node: Node = { id: newId(), type, layout: { span: def.defaultSpan }, props: structuredClone(def.defaultProps), style: {}, events: {} }
+    addNode: (type, target) => {
+      const node = makeNode(type)
+      if (!node) return
       get().update((p) => {
-        const page = currentPage(p)
-        page.children.splice(index ?? page.children.length, 0, node)
+        const { list, index } = targetList(currentPage(p), target)
+        list.splice(index, 0, node)
       })
       set({ selectedId: node.id })
     },
-    moveNode: (from, to) =>
+    moveNode: (id, target) =>
       get().update((p) => {
-        const list = currentPage(p).children
-        const [item] = list.splice(from, 1)
-        if (item) list.splice(to, 0, item)
+        const page = currentPage(p)
+        const from = locate(page.children, id)
+        if (!from || target.beforeId === id || target.afterId === id) return
+        const moving = from.list[from.index]!
+        // A container can't go inside itself.
+        const inside = new Set([...walkNodes([moving])].map((n) => n.id))
+        if ([target.parentId, target.beforeId, target.afterId].some((x) => x && inside.has(x))) return
+        from.list.splice(from.index, 1)
+        const { list, index } = targetList(page, target)
+        list.splice(index, 0, moving)
       }),
     updateNode: (id, fn) =>
       get().update((p) => {
         for (const page of p.pages) {
-          const node = page.children.find((n) => n.id === id)
+          const node = findNode(page.children, id)
           if (node) fn(node)
         }
       }),
     removeNode: (id) => {
       get().update((p) => {
-        for (const page of p.pages) page.children = page.children.filter((n) => n.id !== id)
+        for (const page of p.pages) {
+          const hit = locate(page.children, id)
+          if (hit) hit.list.splice(hit.index, 1)
+        }
       })
       set({ selectedId: null })
     },
     duplicateNode: (id) => {
-      const copyId = newId()
+      let copyId = ''
       get().update((p) => {
-        const list = currentPage(p).children
-        const i = list.findIndex((n) => n.id === id)
-        if (i >= 0) list.splice(i + 1, 0, { ...structuredClone(list[i]!), id: copyId })
+        const hit = locate(currentPage(p).children, id)
+        if (!hit) return
+        const copy = freshIds(structuredClone(hit.list[hit.index]!))
+        copyId = copy.id
+        hit.list.splice(hit.index + 1, 0, copy)
       })
-      set({ selectedId: copyId })
+      if (copyId) set({ selectedId: copyId })
     },
     addPage: () => {
       const id = newId('page')
       get().update((p) => {
         const n = p.pages.length + 1
-        p.pages.push({ id, path: `/pagina-${n}`, title: `Página ${n}`, icon: 'LayoutDashboard', children: [] })
+        p.pages.push({ id, path: `/pagina-${n}`, title: `Página ${n}`, icon: 'LayoutDashboard', state: {}, children: [] })
       })
       set({ pageId: id, selectedId: null })
     },
@@ -269,7 +336,7 @@ export function useSelectedNode(): Node | undefined {
   return useEditor((s) => {
     if (!s.selectedId) return undefined
     for (const page of s.project.pages) {
-      const n = page.children.find((x) => x.id === s.selectedId)
+      const n = findNode(page.children, s.selectedId)
       if (n) return n
     }
     return undefined

@@ -36,7 +36,13 @@ export const Query = z.object({
 export type Query = z.infer<typeof Query>
 
 export const Layout = z.object({
+  /** Columns out of 12 on desktop. */
   span: z.number().int().min(1).max(12).default(12),
+  /** Columns on tablet and phone; unset = sensible defaults. */
+  spanTablet: z.number().int().min(1).max(12).optional(),
+  spanMobile: z.number().int().min(1).max(12).optional(),
+  /** Devices where the block is hidden. */
+  hide: z.array(z.enum(['desktop', 'tablet', 'mobile'])).optional(),
 })
 
 /** What happens when an event fires. Strings accept {{values.x}} / {{row.x}} templates. */
@@ -44,6 +50,13 @@ export const Action = z.discriminatedUnion('type', [
   z.object({ type: z.literal('callQuery'), query: z.string(), body: z.enum(['values', 'row', 'slot', 'day', 'none']).default('values') }),
   /** Asks the user; when they cancel, the remaining actions do not run. */
   z.object({ type: z.literal('confirm'), message: z.string() }),
+  /** Saves a page variable. "{{row}}" stores the whole row; "Hola {{row.name}}" stores text. */
+  z.object({ type: z.literal('setState'), key: z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/), value: z.string() }),
+  /** Opens or closes a Modal / Drawer block of this page. */
+  z.object({ type: z.literal('openModal'), target: z.string() }),
+  z.object({ type: z.literal('closeModal'), target: z.string() }),
+  /** Escape hatch: your own JavaScript, with the event data, state, APIs and helpers in scope. */
+  z.object({ type: z.literal('runCode'), code: z.string() }),
   z.object({ type: z.literal('navigate'), to: z.string() }),
   z.object({ type: z.literal('toast'), message: z.string(), tone: z.enum(['success', 'error', 'info']).default('success') }),
   z.object({ type: z.literal('refresh') }),
@@ -62,21 +75,47 @@ export const Style = z.object({
 })
 export type Style = z.infer<typeof Style>
 
-export const Node = z.object({
-  id: z.string(),
-  type: z.string(),
-  layout: Layout.default({ span: 12 }),
-  props: z.record(z.string(), z.unknown()).default({}),
-  style: Style.default({}),
-  events: z.record(z.string(), z.array(Action)).default({}),
-})
-export type Node = z.infer<typeof Node>
+export type Node = {
+  id: string
+  type: string
+  layout: { span: number; spanTablet?: number; spanMobile?: number; hide?: ('desktop' | 'tablet' | 'mobile')[] }
+  props: Record<string, unknown>
+  style: Style
+  events: Record<string, Action[]>
+  /** Blocks inside a container (Section, Tabs, Modal, Drawer). */
+  children?: Node[]
+}
+
+export const Node: z.ZodType<Node, any> = z.lazy(() =>
+  z.object({
+    id: z.string(),
+    type: z.string(),
+    layout: Layout.default({ span: 12 }),
+    props: z.record(z.string(), z.unknown()).default({}),
+    style: Style.default({}),
+    events: z.record(z.string(), z.array(Action)).default({}),
+    children: z.array(Node).optional(),
+  }),
+)
+
+/** Every node in a tree, depth first. */
+export function* walkNodes(nodes: Node[]): Generator<Node> {
+  for (const n of nodes) {
+    yield n
+    if (n.children) yield* walkNodes(n.children)
+  }
+}
+
+/** The page variable that tells whether a Modal / Drawer is open. */
+export const openKey = (nodeId: string) => `open_${nodeId.replace(/[^A-Za-z0-9_]/g, '_')}`
 
 export const Page = z.object({
   id: z.string(),
   path: z.string().startsWith('/'),
   title: z.string(),
   icon: z.string().default('LayoutDashboard'),
+  /** Initial values of the page variables ({{state.x}}). */
+  state: z.record(z.string(), z.unknown()).default({}),
   children: z.array(Node).default([]),
 })
 export type Page = z.infer<typeof Page>

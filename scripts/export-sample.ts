@@ -1,6 +1,6 @@
 // Writes the CRM and bookings templates as exported repos to .out/<name>, the same way the editor's "Exportar repo" does.
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { crmTemplate, turnosTemplate } from '../packages/schema/src'
 import { generate, kebab } from '../packages/exporter/src'
@@ -14,7 +14,8 @@ export function readRuntime(): Record<string, string> {
     for (const name of readdirSync(dir)) {
       const full = join(dir, name)
       if (statSync(full).isDirectory()) walk(full)
-      else if (/\.(ts|tsx|css)$/.test(name)) out[relative(base, full)] = readFileSync(full, 'utf8')
+      // Keys use forward slashes on every OS (Windows paths would break the export).
+      else if (/\.(ts|tsx|css)$/.test(name)) out[relative(base, full).split(sep).join('/')] = readFileSync(full, 'utf8')
     }
   }
   walk(base)

@@ -22,18 +22,20 @@ export type BlockDef = {
   description: string
   /** lucide-react icon name used in the palette. */
   icon: string
-  category: 'Datos' | 'Gráficos' | 'Agenda' | 'Formularios' | 'Contenido'
+  category: 'Datos' | 'Gráficos' | 'Agenda' | 'Formularios' | 'Contenedores' | 'Contenido'
   defaultSpan: number
   defaultProps: Record<string, unknown>
   fields: PropField[]
   /** Prop keys that hold a GET query id (data is fetched on the page). */
   readQueries: string[]
   /** Events the block fires; each can run a list of actions. */
-  events: { name: string; label: string; arg?: 'values' | 'row' | 'slot' | 'day' }[]
+  events: { name: string; label: string; arg?: 'values' | 'row' | 'slot' | 'day' | 'value' }[]
   /** Component name and import path inside the exported repo. */
   component: { name: string; from: string }
   /** Props passed straight through to the component. */
   passProps: string[]
+  /** Holds other blocks: on a 12-column grid, one per tab, or in an overlay (modal / drawer). */
+  container?: 'grid' | 'tabs' | 'overlay'
 }
 
 export const registry: Record<string, BlockDef> = {
@@ -283,11 +285,13 @@ export const registry: Record<string, BlockDef> = {
       { key: 'description', label: 'Descripción', kind: 'text' },
       { key: 'fields', label: 'Campos', kind: 'formFields' },
       { key: 'submitLabel', label: 'Texto del botón', kind: 'text' },
+      { key: 'initialValues', label: 'Valores iniciales (ej. {{state.seleccionado}})', kind: 'text' },
+      { key: 'resetOnSubmit', label: 'Vaciar al guardar', kind: 'boolean' },
     ],
     readQueries: [],
     events: [{ name: 'onSubmit', label: 'Al enviar', arg: 'values' }],
     component: { name: 'EntityForm', from: '@/components/blocks/entity-form' },
-    passProps: ['title', 'description', 'fields', 'submitLabel'],
+    passProps: ['title', 'description', 'fields', 'submitLabel', 'initialValues', 'resetOnSubmit'],
   },
   ActionButton: {
     type: 'ActionButton',
@@ -332,6 +336,126 @@ export const registry: Record<string, BlockDef> = {
     component: { name: 'HtmlBlock', from: '@/components/blocks/html-block' },
     passProps: ['html'],
   },
+}
+
+registry.Section = {
+  type: 'Section',
+  label: 'Sección',
+  description: 'Agrupa bloques en una tarjeta con su propia grilla',
+  icon: 'SquareDashed',
+  category: 'Contenedores',
+  defaultSpan: 12,
+  defaultProps: { title: 'Sección', card: true },
+  fields: [
+    { key: 'title', label: 'Título', kind: 'text' },
+    { key: 'description', label: 'Descripción', kind: 'text' },
+    { key: 'card', label: 'Con tarjeta', kind: 'boolean' },
+  ],
+  readQueries: [],
+  events: [],
+  component: { name: 'Section', from: '@/components/blocks/section' },
+  passProps: ['title', 'description', 'card'],
+  container: 'grid',
+}
+
+registry.Tabs = {
+  type: 'Tabs',
+  label: 'Pestañas',
+  description: 'Cada bloque adentro es una pestaña (usá Secciones para varias cosas)',
+  icon: 'PanelTop',
+  category: 'Contenedores',
+  defaultSpan: 12,
+  defaultProps: { variant: 'underline' },
+  fields: [
+    {
+      key: 'variant',
+      label: 'Estilo',
+      kind: 'select',
+      options: [
+        { value: 'underline', label: 'Subrayado' },
+        { value: 'pills', label: 'Botones' },
+      ],
+    },
+  ],
+  readQueries: [],
+  events: [],
+  component: { name: 'Tabs', from: '@/components/blocks/tabs' },
+  passProps: ['variant'],
+  container: 'tabs',
+}
+
+registry.Modal = {
+  type: 'Modal',
+  label: 'Modal / panel',
+  description: 'Ventana o panel lateral con cualquier bloque. Se abre con la acción “Abrir modal”',
+  icon: 'AppWindow',
+  category: 'Contenedores',
+  defaultSpan: 12,
+  defaultProps: { title: 'Detalle', kind: 'modal', size: 'md' },
+  fields: [
+    { key: 'title', label: 'Título', kind: 'text' },
+    { key: 'description', label: 'Descripción', kind: 'text' },
+    {
+      key: 'kind',
+      label: 'Tipo',
+      kind: 'select',
+      options: [
+        { value: 'modal', label: 'Ventana al centro' },
+        { value: 'drawer', label: 'Panel lateral' },
+      ],
+    },
+    {
+      key: 'size',
+      label: 'Tamaño',
+      kind: 'select',
+      options: [
+        { value: 'sm', label: 'Chico' },
+        { value: 'md', label: 'Mediano' },
+        { value: 'lg', label: 'Grande' },
+        { value: 'xl', label: 'Muy grande' },
+      ],
+    },
+  ],
+  readQueries: [],
+  events: [],
+  component: { name: 'Modal', from: '@/components/blocks/modal' },
+  passProps: ['title', 'description', 'kind', 'size'],
+  container: 'overlay',
+}
+
+registry.Filter = {
+  type: 'Filter',
+  label: 'Filtro / selector',
+  description: 'Lo que elige el usuario queda en una variable para filtrar otros bloques',
+  icon: 'ListFilter',
+  category: 'Formularios',
+  defaultSpan: 3,
+  defaultProps: { label: 'Filtrar', inputType: 'select', stateKey: 'filtro', allLabel: 'Todos', options: '' },
+  fields: [
+    { key: 'label', label: 'Etiqueta', kind: 'text' },
+    { key: 'stateKey', label: 'Guardar en la variable', kind: 'text' },
+    {
+      key: 'inputType',
+      label: 'Tipo',
+      kind: 'select',
+      options: [
+        { value: 'select', label: 'Lista' },
+        { value: 'text', label: 'Texto / búsqueda' },
+        { value: 'date', label: 'Fecha' },
+        { value: 'number', label: 'Número' },
+      ],
+    },
+    { key: 'options', label: 'Opciones fijas (separadas por coma)', kind: 'text' },
+    { key: 'optionsQuery', label: 'Opciones desde la API', kind: 'query', method: 'GET' },
+    { key: 'optionLabel', label: 'Campo a mostrar', kind: 'field', queryKey: 'optionsQuery' },
+    { key: 'optionValue', label: 'Campo a guardar', kind: 'field', queryKey: 'optionsQuery' },
+    { key: 'allLabel', label: 'Opción “sin filtro”', kind: 'text' },
+    { key: 'placeholder', label: 'Texto de ayuda', kind: 'text' },
+  ],
+  readQueries: ['optionsQuery'],
+  events: [{ name: 'onChange', label: 'Al cambiar (además de guardar la variable)', arg: 'value' }],
+  component: { name: 'Filter', from: '@/components/blocks/filter' },
+  passProps: ['label', 'inputType', 'options', 'optionLabel', 'optionValue', 'allLabel', 'placeholder'],
 }
 
 export function blockFor(node: Node): BlockDef | undefined {
