@@ -6,6 +6,7 @@
 
 :root {
   --radius: 12px;
+  --pk-font: 'Inter Variable';
   --background: oklch(0.985 0.002 270);
   --foreground: oklch(0.21 0.02 270);
   --card: oklch(1 0 0);
@@ -35,7 +36,7 @@
 [data-accent='amber'] { --primary: oklch(0.7 0.16 65); --ring: oklch(0.7 0.16 65 / 0.45); }
 
 @theme inline {
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--pk-font), ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -51,6 +52,18 @@
 @layer base {
   * { border-color: var(--border); }
   html { -webkit-font-smoothing: antialiased; }
-  body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); font-feature-settings: 'cv11', 'ss01'; }
+  body { background: var(--background); color: var(--foreground); font-family: var(--pk-font), ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'cv11', 'ss01'; }
   ::selection { background: color-mix(in oklch, var(--primary) 25%, transparent); }
+}
+
+/* Surface tints: the page background and quiet areas lean warm or neutral. */
+[data-surface='warm']:not(.dark) {
+  --background: oklch(0.975 0.01 95);
+  --muted: oklch(0.945 0.012 95);
+  --border: oklch(0.89 0.015 95);
+}
+[data-surface='neutral']:not(.dark) {
+  --background: oklch(0.985 0 0);
+  --muted: oklch(0.955 0 0);
+  --border: oklch(0.91 0 0);
 }

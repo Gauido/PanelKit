@@ -4,6 +4,7 @@ import { useEffect, useMemo } from 'react'
 import { Card } from '../ui/card'
 import { Skeleton } from '../ui/skeleton'
 import { getPath, toRows } from '../../lib/utils'
+import { motionLevel } from '../../lib/motion'
 
 const icons = { Users, DollarSign, TrendingUp, Activity, ShoppingCart, Briefcase }
 export type KpiIcon = keyof typeof icons
@@ -40,7 +41,9 @@ export function KpiCard(props: KpiCardProps) {
   const Icon = icons[icon] ?? Activity
 
   useEffect(() => {
-    const controls = animate(count, target, { duration: 1.2, ease: [0.16, 1, 0.3, 1] })
+    const level = motionLevel()
+    const duration = level === 'none' ? 0 : level === 'subtle' ? 0.6 : level === 'playful' ? 1.8 : 1.2
+    const controls = animate(count, target, { duration, ease: [0.16, 1, 0.3, 1] })
     return () => controls.stop()
   }, [count, target])
 

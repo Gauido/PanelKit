@@ -1,21 +1,68 @@
 import { create } from 'zustand'
-import { crmTemplate, newId, Project, type Node, type Page } from '@panelkit/schema'
+import { crmTemplate, newId, Project, templates, type Node, type Page } from '@panelkit/schema'
 import { registry } from '@panelkit/exporter'
 
-const STORAGE_KEY = 'panelkit:project'
+const INDEX_KEY = 'panelkit:projects'
+const projectKey = (id: string) => `panelkit:project:${id}`
 const HISTORY_LIMIT = 100
 
-function load(): Project {
+export type ProjectMeta = { id: string; name: string; template: string; updatedAt: number; primary: string; font: string; pages: number; blocks: number }
+
+function safeGet(key: string): string | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return Project.parse(JSON.parse(raw))
+    return localStorage.getItem(key)
   } catch {
-    /* fall back to the template */
+    return null
   }
-  return structuredClone(crmTemplate)
+}
+function safeSet(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
+function loadIndex(): ProjectMeta[] {
+  try {
+    return JSON.parse(safeGet(INDEX_KEY) ?? '[]') as ProjectMeta[]
+  } catch {
+    return []
+  }
+}
+
+function loadProject(id: string): Project | null {
+  try {
+    const raw = safeGet(projectKey(id))
+    return raw ? Project.parse(JSON.parse(raw)) : null
+  } catch {
+    return null
+  }
+}
+
+function metaFor(id: string, template: string, p: Project): ProjectMeta {
+  return {
+    id,
+    name: p.name,
+    template,
+    updatedAt: Date.now(),
+    primary: p.theme.primary ?? p.theme.accent,
+    font: p.theme.font,
+    pages: p.pages.length,
+    blocks: p.pages.reduce((n, pg) => n + pg.children.length, 0),
+  }
 }
 
 type State = {
+  /** null = the projects home screen. */
+  projectId: string | null
+  projects: ProjectMeta[]
+  openProject: (id: string) => void
+  createProject: (opts: { template: string; name: string; theme?: Partial<Project['theme']> }) => string
+  deleteProject: (id: string) => void
+  duplicateProject: (id: string) => void
+  closeProject: () => void
+
   project: Project
   past: Project[]
   future: Project[]
@@ -46,19 +93,73 @@ type State = {
 }
 
 export const useEditor = create<State>((set, get) => {
-  const initial = load()
+  // Migrate the single-project storage used by the first alpha.
+  const legacy = safeGet('panelkit:project')
+  if (legacy && !safeGet(INDEX_KEY)) {
+    try {
+      const p = Project.parse(JSON.parse(legacy))
+      const id = newId('prj')
+      safeSet(projectKey(id), JSON.stringify(p))
+      safeSet(INDEX_KEY, JSON.stringify([metaFor(id, 'crm', p)]))
+    } catch {
+      /* ignore */
+    }
+  }
+  const initial = structuredClone(crmTemplate)
+  const saveIndex = (list: ProjectMeta[]) => {
+    set({ projects: list })
+    safeSet(INDEX_KEY, JSON.stringify(list))
+  }
+  const persist = (p: Project) => {
+    const id = get().projectId
+    if (!id) return
+    safeSet(projectKey(id), JSON.stringify(p))
+    saveIndex(get().projects.map((m) => (m.id === id ? metaFor(id, m.template, p) : m)))
+  }
   const commit = (next: Project) => {
     const { project, past } = get()
     set({ project: next, past: [...past, project].slice(-HISTORY_LIMIT), future: [] })
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-    } catch {
-      /* storage may be unavailable */
-    }
+    persist(next)
   }
   const currentPage = (p: Project): Page => p.pages.find((x) => x.id === get().pageId) ?? p.pages[0]!
 
   return {
+    projectId: null,
+    projects: loadIndex().sort((a, b) => b.updatedAt - a.updatedAt),
+    openProject: (id) => {
+      const p = loadProject(id)
+      if (!p) return
+      set({ projectId: id, project: p, past: [], future: [], pageId: p.pages[0]!.id, selectedId: null, preview: false })
+    },
+    createProject: ({ template, name, theme }) => {
+      const t = templates.find((x) => x.id === template) ?? templates[0]!
+      const p = structuredClone(t.project)
+      p.name = name.trim() || t.name
+      if (theme) p.theme = { ...p.theme, ...theme }
+      const id = newId('prj')
+      safeSet(projectKey(id), JSON.stringify(p))
+      saveIndex([metaFor(id, t.id, p), ...get().projects])
+      return id
+    },
+    deleteProject: (id) => {
+      try {
+        localStorage.removeItem(projectKey(id))
+      } catch {
+        /* ignore */
+      }
+      saveIndex(get().projects.filter((m) => m.id !== id))
+    },
+    duplicateProject: (id) => {
+      const p = loadProject(id)
+      const meta = get().projects.find((m) => m.id === id)
+      if (!p || !meta) return
+      p.name = `${p.name} (copia)`
+      const copy = newId('prj')
+      safeSet(projectKey(copy), JSON.stringify(p))
+      saveIndex([metaFor(copy, meta.template, p), ...get().projects])
+    },
+    closeProject: () => set({ projectId: null, preview: false, selectedId: null }),
+
     project: initial,
     past: [],
     future: [],
@@ -81,12 +182,14 @@ export const useEditor = create<State>((set, get) => {
       const prev = past.at(-1)
       if (!prev) return
       set({ project: prev, past: past.slice(0, -1), future: [project, ...future] })
+      persist(prev)
     },
     redo: () => {
       const { past, project, future } = get()
       const next = future[0]
       if (!next) return
       set({ project: next, past: [...past, project], future: future.slice(1) })
+      persist(next)
     },
 
     selectPage: (id) => set({ pageId: id, selectedId: null }),
@@ -148,7 +251,10 @@ export const useEditor = create<State>((set, get) => {
       set({ pageId: get().project.pages[0]!.id, selectedId: null })
     },
     reset: () => {
-      const fresh = structuredClone(crmTemplate)
+      const meta = get().projects.find((m) => m.id === get().projectId)
+      const t = templates.find((x) => x.id === meta?.template) ?? templates[0]!
+      const fresh = structuredClone(t.project)
+      fresh.name = get().project.name
       commit(fresh)
       set({ pageId: fresh.pages[0]!.id, selectedId: null })
     },

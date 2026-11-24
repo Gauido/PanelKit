@@ -1,10 +1,20 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { createApi, toast, tpl, type Api } from '@panelkit/blocks'
+import { createApi, createMockApi, toast, tpl, type Api } from '@panelkit/blocks'
 import { resolveEnv, type Action, type Project } from '@panelkit/schema'
+
+// Keep one in-memory API per sample source so created rows survive re-renders.
+const mocks = new Map<string, { tables: unknown; api: Api }>()
 
 export function apiFor(project: Project, sourceId: string, env: Record<string, string>): Api | undefined {
   const ds = project.dataSources.find((d) => d.id === sourceId)
   if (!ds) return undefined
+  if (ds.type === 'static') {
+    const cached = mocks.get(ds.id)
+    if (cached && cached.tables === ds.tables) return cached.api
+    const api = createMockApi(ds.tables, ds.id)
+    mocks.set(ds.id, { tables: ds.tables, api })
+    return api
+  }
   const headers = Object.fromEntries(Object.entries(ds.headers).map(([k, v]) => [k, resolveEnv(v, env)]))
   return createApi(resolveEnv(ds.baseUrl, env), headers)
 }

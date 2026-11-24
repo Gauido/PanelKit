@@ -10,3 +10,6 @@ export { ActionButton, type ActionButtonProps } from './components/blocks/action
 export { Toaster, toast } from './components/ui/toaster'
 export { tpl } from './lib/template'
 export { Button } from './components/ui/button'
+export { HtmlBlock, type HtmlBlockProps } from './components/blocks/html-block'
+export { createMockApi } from './lib/api'
+export { motionLevel, type MotionLevel } from './lib/motion'

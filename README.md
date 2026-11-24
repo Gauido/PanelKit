@@ -7,6 +7,8 @@ PanelKit is an open-source visual builder. Drop tables, KPIs, forms and buttons 
 > Status: **alpha**. The editor UI is in Spanish first; English is coming.
 > 🇦🇷 [Leer en español](#en-español)
 
+![Your projects](docs/home.png)
+
 ![The PanelKit editor](docs/editor.png)
 
 ## Why
@@ -15,27 +17,31 @@ Tools like Retool, Appsmith or ToolJet are great until you want to leave: your a
 
 ## What you get
 
-- **Drag & drop canvas** on a 12-column grid, multiple pages, undo/redo.
+- **Projects home and a 2-step wizard:** pick a template (CRM, Turnos y reservas, En blanco) and a style, and start building. Projects are saved in your browser.
+- **Drag & drop canvas** on a 12-column grid, multiple pages, undo/redo, keyboard shortcuts (press `?`).
 - **Blocks:** KPI card (animated count-up), data table (search, sort, pagination), form (validations: required, min/max, length, regex, custom message), button, page header.
-- **Data:** add a REST API, test a query, and PanelKit infers the fields so you map them with dropdowns. Secrets stay as `{{env.API_TOKEN}}` and end up in `.env.example`.
+- **Data:** start with **sample data** stored in the project (no API needed; it exports as an in-memory API), or add a REST API, test a query, and PanelKit infers the fields so you map them with dropdowns. Secrets stay as `{{env.API_TOKEN}}` and end up in `.env.example`.
 - **Events:** each block exposes events (`onSubmit`, `onRowClick`, `onClick`) that run a list of actions: call an API, navigate, show a toast, refresh data, open a link.
-- **Style:** per-block spacing, background, alignment, shadow, or raw Tailwind classes. Theme accent, radius and light/dark mode.
+- **Style:** 6 ready-made styles (Moderno, Cancha, Océano, Minimal, Atardecer, Tecno), any primary color, 7 fonts, radius, warm/neutral/cool surfaces, light/dark, and an animation level (none, subtle, normal, playful). Per-block spacing, background, alignment, shadow or raw Tailwind classes.
+- **Style frameworks and packages:** add Bootstrap, Bulma, Pico, Animate.css or daisyUI in one click, or search npm. CSS packages show live in the editor and are imported in the export; everything lands in `package.json`.
+- **Full control:** a global custom CSS editor and a **free HTML block** where any Tailwind or framework class works, live.
 - **Everything is JSON.** The whole app is one `panelkit.json` you can read, edit, paste or version.
 - **Modern defaults:** Tailwind v4 tokens in OKLCH, Inter, Motion animations (staggered entrance, page transitions, animated numbers, toasts, skeletons).
 
 ## The exported app
 
+![Try mode: the app as it will run](docs/probar.png)
 ![An exported app, dashboard](docs/export-dashboard.png)
 ![An exported app, contacts page in dark mode](docs/export-contactos.png)
 
-Every export is a plain project: React 19, Vite, Tailwind CSS v4, TanStack Query, React Router, Motion and lucide-react. Events become readable code:
+Every export is a plain project: React 19, Vite, Tailwind CSS v4, TanStack Query, React Router, Motion and lucide-react, plus whatever packages you added. Events become readable code:
 
 ```tsx
 <EntityForm
   title="Nuevo contacto"
   fields={[{ name: 'email', label: 'Email', type: 'email', required: true }]}
   onSubmit={async (values) => {
-    await demoApi.request('POST', '/users', values)
+    await datosDeEjemplo.request('POST', '/contacts', values)
     toast(tpl('Contacto {{values.name}} creado', { values }), 'success')
     await queryClient.invalidateQueries()
   }}
@@ -71,6 +77,7 @@ Adding a block = one component in `packages/blocks` + one entry in `packages/exp
 ## Roadmap
 
 - [x] Canvas, pages, REST data, field mapping, events, validations, styles, JSON view, export
+- [x] Projects home, templates, style presets, fonts, animation levels, npm packages, custom CSS, HTML block, sample data
 - [ ] Charts (line, bar, area, pie, then the rest), tabs, modal, alerts, badges
 - [ ] Calendar, kanban, contacts and tasks modules; page templates (profile, invoice, pricing)
 - [ ] Optional backend for direct database connections (Postgres, MySQL, Supabase)
