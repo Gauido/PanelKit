@@ -1,0 +1,56 @@
+/*
+ * PanelKit theme. Shared by the editor preview and every exported repo.
+ * Colors are OKLCH tokens; change --primary (or data-accent) to rebrand.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --radius: 12px;
+  --background: oklch(0.985 0.002 270);
+  --foreground: oklch(0.21 0.02 270);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --muted: oklch(0.955 0.005 270);
+  --muted-foreground: oklch(0.52 0.02 270);
+  --border: oklch(0.91 0.006 270);
+  --primary: oklch(0.56 0.22 285);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.56 0.22 285 / 0.45);
+}
+
+.dark {
+  --background: oklch(0.16 0.01 270);
+  --foreground: oklch(0.96 0.005 270);
+  --card: oklch(0.2 0.012 270);
+  --muted: oklch(0.25 0.012 270);
+  --muted-foreground: oklch(0.68 0.015 270);
+  --border: oklch(0.29 0.012 270);
+  --primary: oklch(0.68 0.19 285);
+  --ring: oklch(0.68 0.19 285 / 0.5);
+}
+
+[data-accent='blue'] { --primary: oklch(0.58 0.2 255); --ring: oklch(0.58 0.2 255 / 0.45); }
+[data-accent='emerald'] { --primary: oklch(0.6 0.15 160); --ring: oklch(0.6 0.15 160 / 0.45); }
+[data-accent='rose'] { --primary: oklch(0.6 0.21 15); --ring: oklch(0.6 0.21 15 / 0.45); }
+[data-accent='amber'] { --primary: oklch(0.7 0.16 65); --ring: oklch(0.7 0.16 65 / 0.45); }
+
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  * { border-color: var(--border); }
+  html { -webkit-font-smoothing: antialiased; }
+  body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); font-feature-settings: 'cv11', 'ss01'; }
+  ::selection { background: color-mix(in oklch, var(--primary) 25%, transparent); }
+}

@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '../../../packages/blocks/src/theme.css';
+
+@source '../../../packages/blocks/src';
+@source '../../../packages/exporter/src';
+
+.editor-dots {
+  background-image: radial-gradient(color-mix(in oklch, var(--foreground) 12%, transparent) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
