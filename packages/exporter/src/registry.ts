@@ -8,6 +8,7 @@ export type PropField =
   | { key: string; label: string; kind: 'field'; queryKey: string }
   | { key: string; label: string; kind: 'columns'; queryKey: string }
   | { key: string; label: string; kind: 'formFields' }
+  | { key: string; label: string; kind: 'code'; language: 'html' | 'css' }
 
 export type ExportContext = {
   project: Project
@@ -164,6 +165,22 @@ export const registry: Record<string, BlockDef> = {
     events: [{ name: 'onClick', label: 'Al hacer clic' }],
     component: { name: 'ActionButton', from: '@/components/blocks/action-button' },
     passProps: ['label', 'variant', 'fullWidth'],
+  },
+  HtmlBlock: {
+    type: 'HtmlBlock',
+    label: 'HTML libre',
+    description: 'Tu propio HTML con clases de Tailwind o del framework que instales',
+    icon: 'Code',
+    category: 'Contenido',
+    defaultSpan: 12,
+    defaultProps: {
+      html: '<div class="rounded-2xl bg-gradient-to-br from-primary to-primary/60 p-8 text-primary-foreground">\n  <h2 class="text-2xl font-semibold">Bloque libre</h2>\n  <p class="mt-2 opacity-90">Escribí HTML con las clases que quieras.</p>\n</div>',
+    },
+    fields: [{ key: 'html', label: 'HTML', kind: 'code', language: 'html' }],
+    readQueries: [],
+    events: [],
+    component: { name: 'HtmlBlock', from: '@/components/blocks/html-block' },
+    passProps: ['html'],
   },
 }
 

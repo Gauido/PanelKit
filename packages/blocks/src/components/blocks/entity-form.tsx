@@ -78,7 +78,7 @@ export function EntityForm({ title, description, fields, submitLabel = 'Guardar'
       {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
       <form onSubmit={handleSubmit} className="mt-4 grid gap-4 sm:grid-cols-2">
         {fields.map((f) => (
-          <label key={f.name} className={cn('grid gap-1.5 text-sm', (f.span === 2 || f.type === 'textarea') && 'sm:col-span-2', f.type === 'checkbox' && 'flex items-center gap-2')}>
+          <label key={f.name} className={cn('grid min-w-0 gap-1.5 text-sm', (f.span === 2 || f.type === 'textarea') && 'sm:col-span-2', f.type === 'checkbox' && 'flex items-center gap-2')}>
             {f.type !== 'checkbox' && (
               <span className="font-medium">
                 {f.label}

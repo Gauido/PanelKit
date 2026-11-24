@@ -95,6 +95,12 @@ function PropEditor({ node, f }: { node: Node; f: PropField }) {
     }
     case 'formFields':
       return <FormFieldsEditor value={(value as FF[]) ?? []} onChange={set} />
+    case 'code':
+      return (
+        <Field label={f.label} hint="Podés usar clases de Tailwind y de los frameworks que instales en Estilo.">
+          <textarea spellCheck={false} className={cn(fieldClass, 'h-72 py-2 font-mono text-[11px] leading-relaxed')} value={(value as string) ?? ''} onChange={(e) => set(e.target.value)} />
+        </Field>
+      )
   }
 }
 

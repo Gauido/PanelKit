@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { ActionButton, DataTable, EntityForm, KpiCard, PageHeader, useApiQuery } from '@panelkit/blocks'
+import { ActionButton, DataTable, EntityForm, HtmlBlock, KpiCard, PageHeader, useApiQuery } from '@panelkit/blocks'
 import type { Node } from '@panelkit/schema'
 import { useEditor } from '../store'
 import { apiFor, runActions } from './actions'
@@ -59,6 +59,8 @@ export function BlockView({ node, live, onNavigate }: { node: Node; live: boolea
       const h = handler('onClick')
       return <ActionButton label={p.label ?? 'Botón'} variant={p.variant} fullWidth={p.fullWidth} onClick={h ? () => h().catch(() => {}) : undefined} />
     }
+    case 'HtmlBlock':
+      return <HtmlBlock html={p.html ?? ''} />
     default:
       return <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Bloque desconocido: {node.type}</div>
   }

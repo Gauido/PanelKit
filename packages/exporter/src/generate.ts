@@ -3,6 +3,7 @@ import { blockFor } from './registry'
 import { spanClass, styleClass } from './layout'
 import { camel, jsxAttr, kebab, pascal, toJs } from './codegen'
 import { devDeps, runtimeDeps } from './versions'
+import { fonts, themeVars } from './themes'
 
 /**
  * Runtime files from @panelkit/blocks/src, keyed by their path under src/
@@ -25,9 +26,26 @@ function printEnvString(value: string): string {
   return `\`${body}\``
 }
 
+function sampleDataFile(project: Project): string | null {
+  const sources = project.dataSources.filter((d) => d.type === 'static')
+  if (!sources.length) return null
+  const body = sources.map((d) => `  ${sourceVar(project, d.id)}: ${JSON.stringify(d.type === 'static' ? d.tables : {}, null, 2).replace(/\n/g, '\n  ')},`).join('\n')
+  return `/** Sample data designed in PanelKit. Replace it with a real API when you are ready. */\nexport const sampleData = {\n${body}\n}\n`
+}
+
 function apiClient(project: Project): string {
-  const lines = ["import { createApi } from '@/lib/api'", '']
+  const hasStatic = project.dataSources.some((d) => d.type === 'static')
+  const hasRest = project.dataSources.some((d) => d.type === 'rest')
+  const names = [hasRest && 'createApi', hasStatic && 'createMockApi'].filter(Boolean).join(', ')
+  const lines = names ? [`import { ${names} } from '@/lib/api'`] : []
+  if (hasStatic) lines.push("import { sampleData } from './sample-data'")
+  lines.push('')
   for (const ds of project.dataSources) {
+    if (ds.type === 'static') {
+      const v = sourceVar(project, ds.id)
+      lines.push(`/** ${ds.name}: sample data kept in memory */`, `export const ${v} = createMockApi(sampleData.${v}, ${toJs(v)})`, '')
+      continue
+    }
     const headers = Object.entries(ds.headers)
     const h = headers.length ? `, {\n${headers.map(([k, v]) => `  ${toJs(k)}: ${printEnvString(v)},`).join('\n')}\n}` : ''
     lines.push(`/** ${ds.name} */`)
@@ -239,18 +257,28 @@ export function generate(project: Project, runtime: RuntimeFiles): GeneratedFile
   for (const p of pages) files[p.path] = p.code
 
   files['src/api/client.ts'] = apiClient(project)
+  const sample = sampleDataFile(project)
+  if (sample) files['src/api/sample-data.ts'] = sample
   files['src/main.tsx'] = mainFile(project, pages)
   files['src/vite-env.d.ts'] = '/// <reference types="vite/client" />\n'
-  files['src/index.css'] = `@import 'tailwindcss';
-@import '@fontsource-variable/inter';
-@import './theme.css';
-
-:root {
-  --radius: ${project.theme.radius}px;
-}
-`
+  const font = fonts[project.theme.font]
+  const vars = Object.entries(themeVars(project.theme)).map(([k, v]) => `  ${k}: ${v};`).join('\n')
+  const cssDeps = project.dependencies.filter((d) => d.kind === 'css' && d.css).map((d) => `@import '${d.name}/${d.css!.replace(/^\/+/, '')}';`)
+  const plugins = project.dependencies.filter((d) => d.kind === 'tailwind-plugin').map((d) => `@plugin '${d.name}';`)
+  files['src/index.css'] = [
+    ...cssDeps,
+    "@import 'tailwindcss';",
+    ...plugins,
+    `@import '${font.pkg}';`,
+    "@import './theme.css';",
+    ...(project.customCss.trim() ? ["@import './custom.css';"] : []),
+    '',
+    `:root,\n.dark {\n${vars}\n}`,
+    '',
+  ].join('\n')
+  if (project.customCss.trim()) files['src/custom.css'] = project.customCss.trim() + '\n'
   files['index.html'] = `<!doctype html>
-<html lang="es" data-accent="${project.theme.accent}">
+<html lang="es" data-accent="${project.theme.accent}" data-surface="${project.theme.surface}" data-motion="${project.theme.motion}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -270,8 +298,14 @@ export function generate(project: Project, runtime: RuntimeFiles): GeneratedFile
         version: '0.1.0',
         type: 'module',
         scripts: { dev: 'vite', build: 'tsc --noEmit && vite build', preview: 'vite preview' },
-        dependencies: runtimeDeps,
-        devDependencies: devDeps,
+        dependencies: Object.fromEntries(
+          Object.entries({
+            ...Object.fromEntries(Object.entries(runtimeDeps).filter(([k]) => !k.startsWith('@fontsource-variable/'))),
+            [font.pkg]: '^5.3.0',
+            ...Object.fromEntries(project.dependencies.map((d) => [d.name, d.version || 'latest'])),
+          }).sort(([a], [b]) => a.localeCompare(b)),
+        ),
+        devDependencies: Object.fromEntries(Object.entries(devDeps).filter(([k]) => !project.dependencies.some((d) => d.name === k))),
       },
       null,
       2,

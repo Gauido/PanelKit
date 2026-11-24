@@ -12,7 +12,17 @@ export const RestDataSource = z.object({
 })
 export type RestDataSource = z.infer<typeof RestDataSource>
 
-export const DataSource = z.discriminatedUnion('type', [RestDataSource])
+/** Sample data that lives inside the project: start without any API. */
+export const StaticDataSource = z.object({
+  id: z.string(),
+  type: z.literal('static'),
+  name: z.string(),
+  /** Collections served at "/<name>". */
+  tables: z.record(z.string(), z.array(z.record(z.string(), z.unknown()))).default({}),
+})
+export type StaticDataSource = z.infer<typeof StaticDataSource>
+
+export const DataSource = z.discriminatedUnion('type', [RestDataSource, StaticDataSource])
 export type DataSource = z.infer<typeof DataSource>
 
 export const Query = z.object({
@@ -69,20 +79,42 @@ export const Page = z.object({
 })
 export type Page = z.infer<typeof Page>
 
+export const FONTS = ['Inter', 'Geist', 'Plus Jakarta Sans', 'DM Sans', 'Manrope', 'Space Grotesk', 'Outfit'] as const
+
 export const Theme = z.object({
+  preset: z.string().default('moderno'),
   accent: z.string().default('violet'),
-  radius: z.number().min(0).max(24).default(12),
+  /** Any CSS color. Overrides `accent` when set. */
+  primary: z.string().optional(),
+  radius: z.number().min(0).max(28).default(12),
   mode: z.enum(['light', 'dark', 'system']).default('system'),
+  font: z.enum(FONTS).default('Inter'),
+  surface: z.enum(['cool', 'neutral', 'warm']).default('cool'),
+  motion: z.enum(['none', 'subtle', 'normal', 'playful']).default('normal'),
 })
 export type Theme = z.infer<typeof Theme>
+
+/** An npm package added to the exported repo. */
+export const Dependency = z.object({
+  name: z.string().min(1),
+  version: z.string().default('latest'),
+  /** css: import a stylesheet globally · tailwind-plugin: @plugin in CSS · js: just install it. */
+  kind: z.enum(['css', 'tailwind-plugin', 'js']).default('js'),
+  /** Stylesheet path inside the package, for kind "css". */
+  css: z.string().optional(),
+})
+export type Dependency = z.infer<typeof Dependency>
 
 export const Project = z.object({
   version: z.literal(1),
   name: z.string().min(1),
-  theme: Theme.default({ accent: 'violet', radius: 12, mode: 'system' }),
+  theme: Theme.default({ preset: 'moderno', accent: 'violet', radius: 12, mode: 'system', font: 'Inter', surface: 'cool', motion: 'normal' }),
   dataSources: z.array(DataSource).default([]),
   queries: z.array(Query).default([]),
   pages: z.array(Page).min(1),
+  dependencies: z.array(Dependency).default([]),
+  /** Global CSS appended last, in the editor and in the export. */
+  customCss: z.string().default(''),
 })
 export type Project = z.infer<typeof Project>
 
@@ -94,6 +126,7 @@ export function parseProject(input: unknown): Project {
 export function envVars(project: Project): string[] {
   const names = new Set<string>()
   for (const ds of project.dataSources) {
+    if (ds.type !== 'rest') continue
     const text = [ds.baseUrl, ...Object.values(ds.headers)].join(' ')
     for (const m of text.matchAll(ENV_REF)) names.add(m[1]!)
   }

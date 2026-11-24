@@ -1,6 +1,6 @@
-import { Briefcase, CalendarDays, FormInput, Gauge, Heading, LayoutDashboard, MousePointerClick, Settings, Table, Users, BarChart3, type LucideIcon } from 'lucide-react'
+import { Code, Briefcase, CalendarDays, FormInput, Gauge, Heading, LayoutDashboard, MousePointerClick, Settings, Table, Users, BarChart3, type LucideIcon } from 'lucide-react'
 
-const icons: Record<string, LucideIcon> = { Briefcase, CalendarDays, FormInput, Gauge, Heading, LayoutDashboard, MousePointerClick, Settings, Table, Users, BarChart3 }
+const icons: Record<string, LucideIcon> = { Code, Briefcase, CalendarDays, FormInput, Gauge, Heading, LayoutDashboard, MousePointerClick, Settings, Table, Users, BarChart3 }
 
 export const pageIcons = ['LayoutDashboard', 'Users', 'Briefcase', 'BarChart3', 'CalendarDays', 'Settings']
 

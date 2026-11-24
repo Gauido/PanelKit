@@ -1,12 +1,14 @@
 import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { Braces, Download, Eye, FileUp, PenLine, Redo2, RotateCcw, Undo2 } from 'lucide-react'
+import { Braces, ChevronLeft, Download, Eye, FileUp, Keyboard, PenLine, Redo2, RotateCcw, Undo2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { Button, cn, toast } from '@panelkit/blocks'
 import { generate, kebab, registry, toZip } from '@panelkit/exporter'
 import { Project } from '@panelkit/schema'
 import { Canvas } from './Canvas'
+import { Home } from './Home'
+import { useLiveStyles } from './lib/live-styles'
 import { JsonDialog } from './JsonDialog'
 import { Preview } from './Preview'
 import { Data } from './panels/Data'
@@ -23,7 +25,7 @@ const leftTabs = [
   { id: 'blocks', label: 'Bloques' },
   { id: 'pages', label: 'Páginas' },
   { id: 'data', label: 'Datos' },
-  { id: 'theme', label: 'Tema' },
+  { id: 'theme', label: 'Estilo' },
 ] as const
 
 function download(blob: Blob, name: string) {
@@ -35,19 +37,8 @@ function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-function useThemeOnDocument() {
-  const theme = useEditor((s) => s.project.theme)
-  useEffect(() => {
-    const root = document.documentElement
-    root.dataset.accent = theme.accent
-    root.style.setProperty('--radius', `${theme.radius}px`)
-    const dark = theme.mode === 'dark' || (theme.mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-    root.classList.toggle('dark', dark)
-  }, [theme])
-}
-
 function TopBar({ onJson }: { onJson: () => void }) {
-  const { project, preview, setPreview, undo, redo, past, future, setProject, reset } = useEditor()
+  const { project, preview, setPreview, undo, redo, past, future, setProject, reset, closeProject } = useEditor()
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function exportRepo() {
@@ -69,19 +60,17 @@ function TopBar({ onJson }: { onJson: () => void }) {
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card/80 px-4 backdrop-blur">
-      <div className="flex items-center gap-2">
-        <span className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-sm font-bold text-primary-foreground shadow-sm">P</span>
-        <span className="font-semibold tracking-tight">PanelKit</span>
-        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">alpha</span>
-      </div>
-      <span className="mx-1 hidden h-6 w-px bg-border sm:block" />
-      <span className="hidden truncate text-sm text-muted-foreground sm:block">{project.name}</span>
+      <button onClick={closeProject} className="group flex items-center gap-1.5 rounded-lg py-1 pl-1 pr-2 transition-colors hover:bg-muted" title="Volver a mis proyectos">
+        <ChevronLeft className="size-4 text-muted-foreground transition-transform group-hover:-translate-x-0.5" />
+        <span className="grid size-7 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-xs font-bold text-primary-foreground shadow-sm">P</span>
+      </button>
+      <span className="truncate text-sm font-medium">{project.name}</span>
       <div className="ml-auto flex items-center gap-1">
         {!preview && (
           <>
             <IconButton onClick={undo} disabled={!past.length} aria-label="Deshacer" title="Deshacer"><Undo2 className="size-4" /></IconButton>
             <IconButton onClick={redo} disabled={!future.length} aria-label="Rehacer" title="Rehacer"><Redo2 className="size-4" /></IconButton>
-            <IconButton onClick={() => { if (confirm('¿Volver a la plantilla CRM? Se pierden los cambios.')) reset() }} aria-label="Reiniciar" title="Volver a la plantilla"><RotateCcw className="size-4" /></IconButton>
+            <IconButton onClick={() => { if (confirm('¿Volver a la plantilla original? Se pierden los cambios.')) reset() }} aria-label="Reiniciar" title="Volver a la plantilla"><RotateCcw className="size-4" /></IconButton>
             <span className="mx-1 h-6 w-px bg-border" />
             <IconButton onClick={onJson} aria-label="Ver JSON" title="Ver y editar el JSON"><Braces className="size-4" /></IconButton>
             <IconButton onClick={() => fileRef.current?.click()} aria-label="Importar JSON" title="Importar panelkit.json"><FileUp className="size-4" /></IconButton>
@@ -108,9 +97,108 @@ function TopBar({ onJson }: { onJson: () => void }) {
   )
 }
 
+const shortcuts: [string, string][] = [
+  ['Ctrl Z / Ctrl Shift Z', 'Deshacer / rehacer'],
+  ['Supr', 'Eliminar el bloque elegido'],
+  ['Ctrl D', 'Duplicar el bloque elegido'],
+  ['[ y ]', 'Achicar o agrandar el bloque'],
+  ['Esc', 'Soltar la selección'],
+  ['P', 'Pasar a modo Probar y volver'],
+  ['?', 'Ver estos atajos'],
+]
+
+function Shortcuts({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+      <motion.div initial={{ scale: 0.95, y: 8 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.97, opacity: 0 }} className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 font-semibold"><Keyboard className="size-4" /> Atajos</h2>
+          <IconButton onClick={onClose} aria-label="Cerrar"><X className="size-4" /></IconButton>
+        </div>
+        <dl className="grid gap-2 text-sm">
+          {shortcuts.map(([k, v]) => (
+            <div key={k} className="flex items-center justify-between gap-4">
+              <dt className="text-muted-foreground">{v}</dt>
+              <dd><kbd className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px]">{k}</kbd></dd>
+            </div>
+          ))}
+        </dl>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function FirstSteps() {
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem('panelkit:tips') === 'off'
+    } catch {
+      return false
+    }
+  })
+  const steps = ['Arrastrá un bloque desde la izquierda', 'Hacé clic en él y cambiá sus datos a la derecha', 'Tocá Probar para usarlo como una app real', 'Exportá el repo cuando esté listo']
+  return (
+    <AnimatePresence>
+      {!hidden && (
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1, transition: { delay: 0.6, type: 'spring', stiffness: 260, damping: 22 } }}
+          exit={{ opacity: 0, y: 20 }}
+          className="pointer-events-auto absolute bottom-4 left-4 z-30 w-72 rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">Primeros pasos</p>
+            <IconButton
+              aria-label="Ocultar"
+              onClick={() => {
+                setHidden(true)
+                try {
+                  localStorage.setItem('panelkit:tips', 'off')
+                } catch {
+                  /* ignore */
+                }
+              }}
+            >
+              <X className="size-3.5" />
+            </IconButton>
+          </div>
+          <ol className="mt-2 grid gap-1.5">
+            {steps.map((s, i) => (
+              <motion.li key={s} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0, transition: { delay: 0.8 + i * 0.08 } }} className="flex items-start gap-2 text-[13px]">
+                <span className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary">{i + 1}</span>
+                {s}
+              </motion.li>
+            ))}
+          </ol>
+          <p className="mt-3 text-[11px] text-muted-foreground">Tocá <kbd className="rounded border border-border bg-muted px-1">?</kbd> para ver los atajos.</p>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 export function App() {
-  useThemeOnDocument()
+  const projectId = useEditor((s) => s.projectId)
+  const project = useEditor((s) => s.project)
+  useLiveStyles(projectId ? project : null)
+  return (
+    <AnimatePresence mode="wait">
+      {projectId ? (
+        <motion.div key={projectId} initial={{ opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}>
+          <Editor />
+        </motion.div>
+      ) : (
+        <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.985 }} transition={{ duration: 0.25 }}>
+          <Home />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+function Editor() {
   const { preview, addNode, moveNode } = useEditor()
+  const [help, setHelp] = useState(false)
   const page = useCurrentPage()
   const [tab, setTab] = useState<(typeof leftTabs)[number]['id']>('blocks')
   const [json, setJson] = useState(false)
@@ -119,12 +207,29 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return
+      const s = useEditor.getState()
       const mod = e.metaKey || e.ctrlKey
-      if (!mod || (e.target as HTMLElement).closest('input, textarea, select')) return
-      if (e.key.toLowerCase() === 'z') {
+      const key = e.key.toLowerCase()
+      if (mod && key === 'z') {
         e.preventDefault()
-        if (e.shiftKey) useEditor.getState().redo()
-        else useEditor.getState().undo()
+        if (e.shiftKey) s.redo()
+        else s.undo()
+      } else if (mod && key === 'd' && s.selectedId) {
+        e.preventDefault()
+        s.duplicateNode(s.selectedId)
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && s.selectedId) {
+        e.preventDefault()
+        s.removeNode(s.selectedId)
+      } else if ((e.key === '[' || e.key === ']') && s.selectedId) {
+        s.updateNode(s.selectedId, (n) => void (n.layout.span = Math.min(12, Math.max(1, n.layout.span + (e.key === ']' ? 1 : -1)))))
+      } else if (e.key === 'Escape') {
+        s.select(null)
+        setHelp(false)
+      } else if (!mod && key === 'p') {
+        s.setPreview(!s.preview)
+      } else if (e.key === '?') {
+        setHelp((h) => !h)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -185,7 +290,10 @@ export function App() {
                 <span className="text-muted-foreground">{page.path}</span>
                 <span className="ml-auto text-xs text-muted-foreground">{page.children.length} bloques · clic para elegir, arrastrá desde la etiqueta para mover</span>
               </div>
-              <Canvas />
+              <div className="relative flex min-h-0 flex-1 flex-col">
+                <Canvas />
+                <FirstSteps />
+              </div>
             </main>
             <aside className="w-80 shrink-0 overflow-y-auto border-l border-border bg-card/50">
               <Inspector />
@@ -202,6 +310,7 @@ export function App() {
         </DndContext>
       )}
       <JsonDialog open={json} onClose={() => setJson(false)} />
+      <AnimatePresence>{help && <Shortcuts onClose={() => setHelp(false)} />}</AnimatePresence>
     </div>
   )
 }
