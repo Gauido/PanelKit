@@ -9,6 +9,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -17,7 +19,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - name: Export the sample CRM and build it
+      - name: Export the sample apps and build them
         run: |
           pnpm export:sample
           cd .out/mi-crm && npm install --no-audit --no-fund && npm run build
+          cd ../reservas-de-canchas && npm install --no-audit --no-fund && npm run build

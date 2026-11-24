@@ -1,9 +1,9 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ComponentProps } from 'react'
 import { cn } from '../../lib/utils'
 
 type Variant = 'primary' | 'ghost' | 'outline'
 
-export function Button({ className, variant = 'primary', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
+export function Button({ className, variant = 'primary', ...props }: ComponentProps<'button'> & { variant?: Variant }) {
   return (
     <button
       className={cn(

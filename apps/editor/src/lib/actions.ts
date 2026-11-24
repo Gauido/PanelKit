@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { createApi, createMockApi, toast, tpl, type Api } from '@panelkit/blocks'
+import { confirm, createApi, createMockApi, toast, tpl, type Api } from '@panelkit/blocks'
 import { resolveEnv, type Action, type Project } from '@panelkit/schema'
 
 // Keep one in-memory API per sample source so created rows survive re-renders.
@@ -39,6 +39,9 @@ export async function runActions(actions: Action[] | undefined, scope: Record<st
           await api.request(q.method, tpl(q.path, scope), body)
           break
         }
+        case 'confirm':
+          if (!(await confirm(tpl(a.message, scope)))) return
+          break
         case 'navigate':
           ctx.navigate(tpl(a.to, scope))
           break

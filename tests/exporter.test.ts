@@ -69,3 +69,46 @@ describe('exporter', () => {
     expect(out['.env.example']).toBe('VITE_API_TOKEN=\nVITE_API_URL=\n')
   })
 })
+
+describe('agenda and charts', () => {
+  const files = generate(turnosTemplate, readRuntime())
+  const agenda = files['src/pages/agenda.tsx']!
+
+  it('passes the free slot to the booking call after a confirmation', () => {
+    expect(agenda).toContain("onSlotClick={async (slot) => {")
+    expect(agenda).toContain("if (!(await confirm(tpl(")
+    expect(agenda).toContain("await datosDelClub.request('POST', '/bookings', slot)")
+    expect(agenda).toContain("import { confirm } from '@/components/ui/confirm'")
+  })
+
+  it('deletes a row through a templated path', () => {
+    expect(agenda).toContain("onRowDelete={async (row) => {")
+    expect(agenda).toContain("await datosDelClub.request('DELETE', tpl('/bookings/{{row.id}}', { row }))")
+  })
+
+  it('mounts the confirm dialog and ships the new blocks', () => {
+    expect(files['src/main.tsx']).toContain('<ConfirmHost />')
+    for (const f of ['chart', 'calendar', 'availability-grid', 'timeline']) expect(files[`src/components/blocks/${f}.tsx`]).toBeTruthy()
+  })
+})
+
+describe('chart grouping', async () => {
+  const { groupRows } = await import('../packages/blocks/src/components/blocks/chart')
+  const rows = [
+    { court: 'A', amount: 10, date: '2026-01-05' },
+    { court: 'B', amount: 5, date: '2026-01-20' },
+    { court: 'A', amount: 20, date: '2026-02-01' },
+  ]
+  it('sums by label', () => {
+    expect(groupRows({ data: rows, labelField: 'court', valueField: 'amount', aggregate: 'sum' })).toEqual([
+      { label: 'A', value: 30 },
+      { label: 'B', value: 5 },
+    ])
+  })
+  it('counts by month', () => {
+    expect(groupRows({ data: rows, labelField: 'date', aggregate: 'count', dateGroup: 'month' })).toEqual([
+      { label: '2026-01', value: 2 },
+      { label: '2026-02', value: 1 },
+    ])
+  })
+})

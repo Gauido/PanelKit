@@ -22,14 +22,14 @@ export type BlockDef = {
   description: string
   /** lucide-react icon name used in the palette. */
   icon: string
-  category: 'Datos' | 'Formularios' | 'Contenido'
+  category: 'Datos' | 'Gráficos' | 'Agenda' | 'Formularios' | 'Contenido'
   defaultSpan: number
   defaultProps: Record<string, unknown>
   fields: PropField[]
   /** Prop keys that hold a GET query id (data is fetched on the page). */
   readQueries: string[]
   /** Events the block fires; each can run a list of actions. */
-  events: { name: string; label: string; arg?: 'values' | 'row' }[]
+  events: { name: string; label: string; arg?: 'values' | 'row' | 'slot' | 'day' }[]
   /** Component name and import path inside the exported repo. */
   component: { name: string; from: string }
   /** Props passed straight through to the component. */
@@ -107,11 +107,161 @@ export const registry: Record<string, BlockDef> = {
       { key: 'columns', label: 'Columnas', kind: 'columns', queryKey: 'query' },
       { key: 'pageSize', label: 'Filas por página', kind: 'number' },
       { key: 'searchable', label: 'Búsqueda', kind: 'boolean' },
+      { key: 'filterField', label: 'Filtro rápido por', kind: 'field', queryKey: 'query' },
     ],
     readQueries: ['query'],
-    events: [{ name: 'onRowClick', label: 'Al hacer clic en una fila', arg: 'row' }],
+    events: [
+      { name: 'onRowClick', label: 'Al hacer clic en una fila', arg: 'row' },
+      { name: 'onRowEdit', label: 'Botón editar de cada fila', arg: 'row' },
+      { name: 'onRowDelete', label: 'Botón eliminar de cada fila', arg: 'row' },
+    ],
     component: { name: 'DataTable', from: '@/components/blocks/data-table' },
-    passProps: ['title', 'columns', 'pageSize', 'searchable'],
+    passProps: ['title', 'columns', 'pageSize', 'searchable', 'filterField'],
+  },
+  Chart: {
+    type: 'Chart',
+    label: 'Gráfico',
+    description: 'Barras, líneas, área o torta animados',
+    icon: 'BarChart3',
+    category: 'Gráficos',
+    defaultSpan: 6,
+    defaultProps: { title: 'Gráfico', chartType: 'bar', aggregate: 'count', dateGroup: 'none', height: 240 },
+    fields: [
+      { key: 'title', label: 'Título', kind: 'text' },
+      { key: 'query', label: 'Datos', kind: 'query', method: 'GET' },
+      {
+        key: 'chartType',
+        label: 'Tipo',
+        kind: 'select',
+        options: [
+          { value: 'bar', label: 'Barras' },
+          { value: 'line', label: 'Línea' },
+          { value: 'area', label: 'Área' },
+          { value: 'donut', label: 'Torta (dona)' },
+        ],
+      },
+      { key: 'labelField', label: 'Agrupar por', kind: 'field', queryKey: 'query' },
+      {
+        key: 'dateGroup',
+        label: 'Si es fecha, agrupar por',
+        kind: 'select',
+        options: [
+          { value: 'none', label: 'No es fecha' },
+          { value: 'day', label: 'Día' },
+          { value: 'month', label: 'Mes' },
+        ],
+      },
+      {
+        key: 'aggregate',
+        label: 'Cálculo',
+        kind: 'select',
+        options: [
+          { value: 'count', label: 'Cantidad de filas' },
+          { value: 'sum', label: 'Sumar campo' },
+          { value: 'avg', label: 'Promedio del campo' },
+        ],
+      },
+      { key: 'valueField', label: 'Campo numérico', kind: 'field', queryKey: 'query' },
+      { key: 'height', label: 'Alto (px)', kind: 'number' },
+    ],
+    readQueries: ['query'],
+    events: [],
+    component: { name: 'Chart', from: '@/components/blocks/chart' },
+    passProps: ['title', 'chartType', 'labelField', 'valueField', 'aggregate', 'dateGroup', 'height'],
+  },
+  Timeline: {
+    type: 'Timeline',
+    label: 'Actividad',
+    description: 'Línea de tiempo con lo último que pasó',
+    icon: 'History',
+    category: 'Datos',
+    defaultSpan: 4,
+    defaultProps: { title: 'Actividad reciente', order: 'desc', limit: 6 },
+    fields: [
+      { key: 'title', label: 'Título', kind: 'text' },
+      { key: 'query', label: 'Datos', kind: 'query', method: 'GET' },
+      { key: 'titleField', label: 'Texto principal', kind: 'field', queryKey: 'query' },
+      { key: 'descriptionField', label: 'Detalle', kind: 'field', queryKey: 'query' },
+      { key: 'dateField', label: 'Fecha', kind: 'field', queryKey: 'query' },
+      { key: 'statusField', label: 'Estado', kind: 'field', queryKey: 'query' },
+      {
+        key: 'order',
+        label: 'Orden',
+        kind: 'select',
+        options: [
+          { value: 'desc', label: 'Más nuevo primero' },
+          { value: 'asc', label: 'Más viejo primero' },
+        ],
+      },
+      { key: 'limit', label: 'Máximo de ítems', kind: 'number' },
+    ],
+    readQueries: ['query'],
+    events: [{ name: 'onItemClick', label: 'Al hacer clic en un ítem', arg: 'row' }],
+    component: { name: 'Timeline', from: '@/components/blocks/timeline' },
+    passProps: ['title', 'titleField', 'descriptionField', 'dateField', 'statusField', 'order', 'limit'],
+  },
+  Calendar: {
+    type: 'Calendar',
+    label: 'Calendario',
+    description: 'Agenda semanal o mensual con tus eventos',
+    icon: 'CalendarDays',
+    category: 'Agenda',
+    defaultSpan: 12,
+    defaultProps: { title: 'Agenda', view: 'week' },
+    fields: [
+      { key: 'title', label: 'Título', kind: 'text' },
+      { key: 'query', label: 'Datos', kind: 'query', method: 'GET' },
+      { key: 'dateField', label: 'Fecha', kind: 'field', queryKey: 'query' },
+      { key: 'timeField', label: 'Hora (si está aparte)', kind: 'field', queryKey: 'query' },
+      { key: 'titleField', label: 'Texto del evento', kind: 'field', queryKey: 'query' },
+      { key: 'statusField', label: 'Estado (color)', kind: 'field', queryKey: 'query' },
+      {
+        key: 'view',
+        label: 'Vista inicial',
+        kind: 'select',
+        options: [
+          { value: 'week', label: 'Semana' },
+          { value: 'month', label: 'Mes' },
+        ],
+      },
+    ],
+    readQueries: ['query'],
+    events: [
+      { name: 'onEventClick', label: 'Al hacer clic en un evento', arg: 'row' },
+      { name: 'onDayClick', label: 'Al hacer clic en un día', arg: 'day' },
+    ],
+    component: { name: 'Calendar', from: '@/components/blocks/calendar' },
+    passProps: ['title', 'dateField', 'timeField', 'titleField', 'statusField', 'view'],
+  },
+  AvailabilityGrid: {
+    type: 'AvailabilityGrid',
+    label: 'Grilla de turnos',
+    description: 'Disponibilidad por recurso y horario: canchas, salas, profesionales',
+    icon: 'LayoutGrid',
+    category: 'Agenda',
+    defaultSpan: 12,
+    defaultProps: { title: 'Disponibilidad', resources: 'Recurso 1, Recurso 2', startTime: '08:00', endTime: '22:00', slotMinutes: 60 },
+    fields: [
+      { key: 'title', label: 'Título', kind: 'text' },
+      { key: 'query', label: 'Reservas', kind: 'query', method: 'GET' },
+      { key: 'resources', label: 'Recursos (separados por coma)', kind: 'text' },
+      { key: 'resourceField', label: 'Campo del recurso', kind: 'field', queryKey: 'query' },
+      { key: 'dateField', label: 'Fecha', kind: 'field', queryKey: 'query' },
+      { key: 'timeField', label: 'Hora (si está aparte)', kind: 'field', queryKey: 'query' },
+      { key: 'durationField', label: 'Duración en minutos', kind: 'field', queryKey: 'query' },
+      { key: 'labelField', label: 'Texto de la reserva', kind: 'field', queryKey: 'query' },
+      { key: 'statusField', label: 'Estado (color)', kind: 'field', queryKey: 'query' },
+      { key: 'startTime', label: 'Abre a las', kind: 'text' },
+      { key: 'endTime', label: 'Cierra a las', kind: 'text' },
+      { key: 'slotMinutes', label: 'Minutos por turno', kind: 'number' },
+    ],
+    readQueries: ['query'],
+    events: [
+      { name: 'onSlotClick', label: 'Al tocar un turno libre', arg: 'slot' },
+      { name: 'onBookingClick', label: 'Al tocar una reserva', arg: 'row' },
+    ],
+    component: { name: 'AvailabilityGrid', from: '@/components/blocks/availability-grid' },
+    passProps: ['title', 'resources', 'resourceField', 'dateField', 'timeField', 'durationField', 'labelField', 'statusField', 'startTime', 'endTime', 'slotMinutes'],
   },
   EntityForm: {
     type: 'EntityForm',

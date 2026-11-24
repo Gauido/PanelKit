@@ -79,11 +79,15 @@ function actionLines(project: Project, actions: Action[], arg: string | undefine
         if (!q) break
         const api = sourceVar(project, q.source)
         addImport(ctx, '@/api/client', api)
-        const body = a.body === 'none' || !arg ? '' : `, ${a.body === 'row' ? (arg === 'row' ? 'row' : 'undefined') : arg === 'values' ? 'values' : 'undefined'}`
+        const body = a.body === 'none' || !arg ? '' : `, ${a.body === arg ? arg : 'undefined'}`
         const path = /\{\{/.test(q.path) ? `tpl(${toJs(q.path)}, ${scope})` : toJs(q.path)
         out.push(`await ${api}.request(${toJs(q.method)}, ${path}${body})`)
         break
       }
+      case 'confirm':
+        addImport(ctx, '@/components/ui/confirm', 'confirm')
+        out.push(`if (!(await confirm(${str(a.message)}))) return`)
+        break
       case 'navigate':
         ctx.needsNavigate = true
         out.push(`navigate(${str(a.to)})`)
@@ -136,7 +140,7 @@ function nodeJsx(project: Project, node: Node, index: number, ctx: PageCtx): str
     if (!actions?.length) continue
     const body = actionLines(project, actions, ev.arg, ctx)
     if (!body.length) continue
-    const param = ev.arg === 'row' ? '(row)' : ev.arg === 'values' ? '(values)' : '()'
+    const param = ev.arg ? `(${ev.arg})` : '()'
     attrs.push(`${ev.name}={async ${param} => {\n${body.map((l) => `            ${l}`).join('\n')}\n          }}`)
   }
   const cls = [spanClass(node.layout.span), styleClass(node.style)].filter(Boolean).join(' ')
@@ -185,6 +189,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createBrowserRouter, RouterProvider } from 'react-router'
 import { AppShell, type NavItem } from '@/layout/app-shell'
 import { Toaster } from '@/components/ui/toaster'
+import { ConfirmHost } from '@/components/ui/confirm'
 ${imports.join('\n')}
 import '@/index.css'
 
@@ -206,6 +211,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
       <Toaster />
+      <ConfirmHost />
     </QueryClientProvider>
   </StrictMode>,
 )

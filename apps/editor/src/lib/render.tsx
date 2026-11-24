@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { ActionButton, DataTable, EntityForm, HtmlBlock, KpiCard, PageHeader, useApiQuery } from '@panelkit/blocks'
+import { ActionButton, AvailabilityGrid, Calendar, Chart, DataTable, EntityForm, HtmlBlock, KpiCard, PageHeader, Timeline, useApiQuery, type Slot } from '@panelkit/blocks'
 import type { Node } from '@panelkit/schema'
 import { useEditor } from '../store'
 import { apiFor, runActions } from './actions'
@@ -22,6 +22,11 @@ export function BlockView({ node, live, onNavigate }: { node: Node; live: boolea
   const ctx = { project, env, navigate: onNavigate, queryClient }
   const handler = (event: string) =>
     live && node.events[event]?.length ? (arg?: Record<string, unknown>, key?: string) => runActions(node.events[event], key ? { [key]: arg } : {}, ctx) : undefined
+  /** Fire-and-forget handler for events that pass one argument named `key`. */
+  const on = (event: string, key: string) => {
+    const h = handler(event)
+    return h ? (arg: Record<string, unknown>) => void h(arg, key).catch(() => {}) : undefined
+  }
 
   switch (node.type) {
     case 'PageHeader':
@@ -39,7 +44,10 @@ export function BlockView({ node, live, onNavigate }: { node: Node; live: boolea
           data={data.data}
           loading={data.isLoading}
           error={data.error?.message}
+          filterField={p.filterField || undefined}
           onRowClick={h ? (row) => void h(row, 'row').catch(() => {}) : undefined}
+          onRowEdit={on('onRowEdit', 'row')}
+          onRowDelete={on('onRowDelete', 'row')}
         />
       )
     }
@@ -59,6 +67,14 @@ export function BlockView({ node, live, onNavigate }: { node: Node; live: boolea
       const h = handler('onClick')
       return <ActionButton label={p.label ?? 'Botón'} variant={p.variant} fullWidth={p.fullWidth} onClick={h ? () => h().catch(() => {}) : undefined} />
     }
+    case 'Chart':
+      return <Chart {...p} data={data.data} loading={data.isLoading} />
+    case 'Timeline':
+      return <Timeline {...p} data={data.data} loading={data.isLoading} onItemClick={on('onItemClick', 'row')} />
+    case 'Calendar':
+      return <Calendar {...p} data={data.data} loading={data.isLoading} onEventClick={on('onEventClick', 'row')} onDayClick={on('onDayClick', 'day') as ((d: { date: string }) => void) | undefined} />
+    case 'AvailabilityGrid':
+      return <AvailabilityGrid {...p} data={data.data} loading={data.isLoading} onSlotClick={on('onSlotClick', 'slot') as ((s: Slot) => void) | undefined} onBookingClick={on('onBookingClick', 'row')} />
     case 'HtmlBlock':
       return <HtmlBlock html={p.html ?? ''} />
     default:
