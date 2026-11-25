@@ -31,8 +31,9 @@ PanelKit is done when a small business without a programmer, or a dev who only w
 - [x] Repeater: any blocks once per record (cards, galleries, lists)
 - [x] Basic elements: text, image, divider, spacer
 - [x] Show only if: conditions picked from lists, code optional
-- [ ] Kanban by status
-- [ ] File / image upload, rich text, map, notifications
+- [x] Kanban by status (drag cards, saves to your API, column totals)
+- [x] File / image upload in forms (sent as data URL in JSON)
+- [ ] Rich text, map, notifications
 
 ### 2. Auth and roles
 - [x] Login against your own API (email + password, token stored, sent on every call), demo users for sample data

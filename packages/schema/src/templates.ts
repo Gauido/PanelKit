@@ -49,6 +49,7 @@ export const crmTemplate: ProjectT = Project.parse({
     { id: 'createContact', source: 'demo', method: 'POST', path: '/contacts', fields: [] },
     { id: 'deleteContact', source: 'demo', method: 'DELETE', path: '/contacts/{{row.id}}', fields: [] },
     { id: 'updateContact', source: 'demo', method: 'PUT', path: '/contacts/{{state.seleccionado.id}}', fields: [] },
+    { id: 'updateDeal', source: 'demo', method: 'PUT', path: '/deals/{{row.id}}', fields: [] },
   ],
   pages: [
     {
@@ -149,6 +150,7 @@ export const crmTemplate: ProjectT = Project.parse({
               { name: 'phone', label: 'Teléfono', type: 'text', pattern: '[0-9 +()-]{6,}', message: 'Solo números y + ( ) -' },
               { name: 'company', label: 'Empresa', type: 'text' },
               { name: 'stage', label: 'Etapa', type: 'select', options: 'Lead, Calificado, Propuesta, Cliente' },
+              { name: 'photo', label: 'Foto (opcional)', type: 'image', maxSizeMb: 2 },
             ],
           },
           events: {
@@ -232,6 +234,26 @@ export const crmTemplate: ProjectT = Project.parse({
               ],
             },
           ],
+        },
+      ],
+    },
+    {
+      id: 'oportunidades',
+      path: '/oportunidades',
+      title: 'Oportunidades',
+      icon: 'Briefcase',
+      children: [
+        { id: 'o_h', type: 'PageHeader', props: { title: 'Oportunidades', subtitle: 'Arrastrá una tarjeta para cambiar su etapa' } },
+        {
+          id: 'o_k',
+          type: 'Kanban',
+          props: { title: '', query: 'deals', groupField: 'stage', columns: 'Propuesta, Negociación, Ganada, Perdida', titleField: 'title', subtitleField: 'company', amountField: 'amount', currency: '$' },
+          events: {
+            onCardMove: [
+              { type: 'callQuery', query: 'updateDeal', body: 'row' },
+              { type: 'toast', message: '{{row.title}} pasó a {{row.stage}}', tone: 'success' },
+            ],
+          },
         },
       ],
     },

@@ -180,6 +180,19 @@ describe('free layout, conditions and repeaters', () => {
   })
 })
 
+describe('kanban and uploads', () => {
+  const files = generate(crmTemplate, readRuntime())
+  it('saves a moved card through the API', () => {
+    const page = files['src/pages/oportunidades.tsx']!
+    expect(page).toContain('<Kanban')
+    expect(page).toContain('onCardMove={async (row) => {')
+    expect(page).toContain("await datosDeEjemplo.request('PUT', tpl('/deals/{{row.id}}', { row }), row)")
+  })
+  it('keeps image fields in the form', () => {
+    expect(files['src/pages/contactos.tsx']).toContain("type: 'image'")
+  })
+})
+
 describe('login and roles', () => {
   const files = generate(crmWithLogin(), readRuntime())
   const main = files['src/main.tsx']!

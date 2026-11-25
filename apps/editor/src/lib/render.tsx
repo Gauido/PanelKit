@@ -1,7 +1,7 @@
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
-  ActionButton, AvailabilityGrid, Calendar, Chart, DataTable, Divider, EntityForm, Filter, HtmlBlock, Image, KpiCard, Modal, PageHeader, Section, Spacer, Stack, Tabs, Text, Timeline,
+  ActionButton, AvailabilityGrid, Kanban, Calendar, Chart, DataTable, Divider, EntityForm, Filter, HtmlBlock, Image, KpiCard, Modal, PageHeader, Section, Spacer, Stack, Tabs, Text, Timeline,
   hasRole, hasTemplate, resolve, toRows, tpl, useSession, useApiQuery, whenText, type Slot,
 } from '@panelkit/blocks'
 import { layoutClass, registry, styleClass, styleCss } from '@panelkit/exporter'
@@ -171,6 +171,19 @@ export function BlockView({ node, live, onNavigate, design, renderChildren }: Pr
             </ItemContext.Provider>
           ))}
         </div>
+      )
+    }
+    case 'Kanban': {
+      const move = handler('onCardMove')
+      return (
+        <Kanban
+          {...p}
+          groupField={p.groupField || 'status'}
+          data={data.data}
+          loading={data.isLoading}
+          onCardMove={move ? (row) => move(row, 'row') : undefined}
+          onCardClick={on('onCardClick', 'row')}
+        />
       )
     }
     case 'Text':

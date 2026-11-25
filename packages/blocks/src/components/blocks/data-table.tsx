@@ -11,7 +11,7 @@ import { cn, getPath, toRows } from '../../lib/utils'
 export type Column = {
   field: string
   label: string
-  format?: 'text' | 'number' | 'money' | 'badge' | 'email' | 'date' | 'datetime' | 'boolean'
+  format?: 'text' | 'number' | 'money' | 'badge' | 'email' | 'date' | 'datetime' | 'boolean' | 'image' | 'link'
 }
 
 export type DataTableProps = {
@@ -37,6 +37,14 @@ function Cell({ value, format = 'text' }: { value: unknown; format?: Column['for
   switch (format) {
     case 'badge':
       return <StatusBadge value={value} />
+    case 'image':
+      return <img src={text} alt="" loading="lazy" className="size-9 rounded-md object-cover" />
+    case 'link':
+      return (
+        <a className="text-primary hover:underline" href={text} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+          {text.startsWith('data:') ? 'Descargar' : 'Abrir'}
+        </a>
+      )
     case 'boolean':
       return <StatusBadge value={value === true || text === 'true' || text === '1'} />
     case 'money':
