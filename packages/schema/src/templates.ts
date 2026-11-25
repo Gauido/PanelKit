@@ -200,6 +200,42 @@ export const crmTemplate: ProjectT = Project.parse({
       ],
     },
     {
+      id: 'directorio',
+      path: '/directorio',
+      title: 'Directorio',
+      icon: 'Users',
+      children: [
+        {
+          id: 'd_top',
+          type: 'Stack',
+          props: { direction: 'row', gap: 'md', align: 'center', justify: 'between', wrap: true, stackOnMobile: true },
+          style: { css: { 'padding-bottom': '4px' } },
+          children: [
+            { id: 'd_title', type: 'Text', props: { text: 'Directorio', variant: 'title' } },
+            { id: 'd_sub', type: 'Text', props: { text: 'Tus contactos como tarjetas', variant: 'small' } },
+          ],
+        },
+        {
+          id: 'd_list',
+          type: 'Repeater',
+          props: { query: 'contacts', emptyText: 'Todavía no hay contactos.' },
+          children: [
+            {
+              id: 'd_card',
+              type: 'Section',
+              layout: { span: 4 },
+              props: { title: '{{item.name}}', description: '{{item.company}} · {{item.city}}', card: true },
+              children: [
+                { id: 'd_mail', type: 'Text', props: { text: '{{item.email}}', variant: 'small' } },
+                { id: 'd_phone', type: 'Text', props: { text: '{{item.phone}}', variant: 'small' } },
+                { id: 'd_client', type: 'Text', props: { text: 'Cliente', variant: 'label' }, style: { textColor: 'success' }, visibleIf: "item.stage === 'Cliente'" },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: 'tareas',
       path: '/tareas',
       title: 'Tareas',

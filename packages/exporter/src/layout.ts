@@ -91,6 +91,12 @@ const BACKGROUND = { default: '', muted: 'rounded-[var(--radius)] bg-muted', pri
 const ALIGN = { left: 'text-left', center: 'text-center flex justify-center', right: 'text-right flex justify-end' } as const
 const SHADOW = { none: '', sm: 'shadow-sm', lg: 'shadow-xl' } as const
 
+const TEXT_COLOR = { default: '', muted: 'text-muted-foreground', primary: 'text-primary', success: 'text-emerald-600', warning: 'text-amber-600', danger: 'text-rose-600' } as const
+const FONT_SIZE = { xs: 'text-xs', sm: 'text-sm', base: 'text-base', lg: 'text-lg', xl: 'text-xl', '2xl': 'text-2xl', '3xl': 'text-3xl', '4xl': 'text-4xl' } as const
+const FONT_WEIGHT = { normal: 'font-normal', medium: 'font-medium', semibold: 'font-semibold', bold: 'font-bold' } as const
+const RADIUS = { none: 'rounded-none', sm: 'rounded-sm', md: 'rounded-md', lg: 'rounded-lg', xl: 'rounded-2xl', full: 'rounded-full' } as const
+const BORDER = { none: '', default: 'border border-border', primary: 'border-2 border-primary', dashed: 'border-2 border-dashed border-border' } as const
+
 export function styleClass(style: Style | undefined): string {
   if (!style) return ''
   return [
@@ -98,8 +104,27 @@ export function styleClass(style: Style | undefined): string {
     style.background && BACKGROUND[style.background],
     style.align && ALIGN[style.align],
     style.shadow && SHADOW[style.shadow],
+    style.textColor && TEXT_COLOR[style.textColor],
+    style.fontSize && FONT_SIZE[style.fontSize],
+    style.fontWeight && FONT_WEIGHT[style.fontWeight],
+    style.radius && RADIUS[style.radius],
+    style.border && BORDER[style.border],
+    (style.radius || style.border) && 'overflow-hidden',
     style.className,
   ]
     .filter(Boolean)
     .join(' ')
+}
+
+/** Free CSS as a React style object: "min-height" and "minHeight" both work; "--x" variables pass as is. */
+export function styleCss(style: Style | undefined): Record<string, string> | undefined {
+  const css = style?.css
+  if (!css) return undefined
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(css)) {
+    const key = k.trim()
+    if (!key || v == null || v === '') continue
+    out[key.startsWith('--') ? key : key.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())] = String(v)
+  }
+  return Object.keys(out).length ? out : undefined
 }

@@ -35,7 +35,7 @@ export type BlockDef = {
   /** Props passed straight through to the component. */
   passProps: string[]
   /** Holds other blocks: on a 12-column grid, one per tab, or in an overlay (modal / drawer). */
-  container?: 'grid' | 'tabs' | 'overlay'
+  container?: 'grid' | 'tabs' | 'overlay' | 'flex'
 }
 
 export const registry: Record<string, BlockDef> = {
@@ -460,4 +460,178 @@ registry.Filter = {
 
 export function blockFor(node: Node): BlockDef | undefined {
   return registry[node.type]
+}
+
+registry.Text = {
+  type: 'Text',
+  label: 'Texto',
+  description: 'Títulos, párrafos, etiquetas o enlaces',
+  icon: 'Type',
+  category: 'Contenido',
+  defaultSpan: 12,
+  defaultProps: { text: 'Escribí tu texto', variant: 'paragraph' },
+  fields: [
+    { key: 'text', label: 'Texto', kind: 'textarea' },
+    {
+      key: 'variant',
+      label: 'Tipo',
+      kind: 'select',
+      options: [
+        { value: 'title', label: 'Título' },
+        { value: 'subtitle', label: 'Subtítulo' },
+        { value: 'paragraph', label: 'Párrafo' },
+        { value: 'small', label: 'Chico' },
+        { value: 'label', label: 'Etiqueta' },
+      ],
+    },
+    { key: 'href', label: 'Enlace (opcional)', kind: 'text' },
+    { key: 'newTab', label: 'Abrir en otra pestaña', kind: 'boolean' },
+  ],
+  readQueries: [],
+  events: [],
+  component: { name: 'Text', from: '@/components/blocks/text' },
+  passProps: ['text', 'variant', 'href', 'newTab'],
+}
+
+registry.Image = {
+  type: 'Image',
+  label: 'Imagen',
+  description: 'Una foto o logo desde una URL',
+  icon: 'Image',
+  category: 'Contenido',
+  defaultSpan: 4,
+  defaultProps: { src: '', alt: '', fit: 'cover', height: 180, rounded: true },
+  fields: [
+    { key: 'src', label: 'URL de la imagen', kind: 'text' },
+    { key: 'alt', label: 'Descripción (accesibilidad)', kind: 'text' },
+    {
+      key: 'fit',
+      label: 'Ajuste',
+      kind: 'select',
+      options: [
+        { value: 'cover', label: 'Llenar y recortar' },
+        { value: 'contain', label: 'Mostrar entera' },
+      ],
+    },
+    { key: 'height', label: 'Alto (px, vacío = natural)', kind: 'number' },
+    { key: 'rounded', label: 'Bordes redondeados', kind: 'boolean' },
+    { key: 'caption', label: 'Epígrafe', kind: 'text' },
+  ],
+  readQueries: [],
+  events: [],
+  component: { name: 'Image', from: '@/components/blocks/image' },
+  passProps: ['src', 'alt', 'fit', 'height', 'rounded', 'caption'],
+}
+
+registry.Divider = {
+  type: 'Divider',
+  label: 'Separador',
+  description: 'Una línea entre bloques, con texto opcional',
+  icon: 'Minus',
+  category: 'Contenido',
+  defaultSpan: 12,
+  defaultProps: { label: '', spacing: 8 },
+  fields: [
+    { key: 'label', label: 'Texto en el medio', kind: 'text' },
+    { key: 'spacing', label: 'Aire arriba y abajo (px)', kind: 'number' },
+  ],
+  readQueries: [],
+  events: [],
+  component: { name: 'Divider', from: '@/components/blocks/divider' },
+  passProps: ['label', 'spacing'],
+}
+
+registry.Spacer = {
+  type: 'Spacer',
+  label: 'Espacio',
+  description: 'Espacio vacío para separar',
+  icon: 'MoveVertical',
+  category: 'Contenido',
+  defaultSpan: 12,
+  defaultProps: { size: 24 },
+  fields: [{ key: 'size', label: 'Alto (px)', kind: 'number' }],
+  readQueries: [],
+  events: [],
+  component: { name: 'Spacer', from: '@/components/blocks/divider' },
+  passProps: ['size'],
+}
+
+registry.Stack = {
+  type: 'Stack',
+  label: 'Fila / columna',
+  description: 'Pone bloques uno al lado del otro (o abajo) con el tamaño de su contenido',
+  icon: 'Columns3',
+  category: 'Contenedores',
+  defaultSpan: 12,
+  defaultProps: { direction: 'row', gap: 'md', align: 'center', justify: 'start', wrap: true, stackOnMobile: false },
+  fields: [
+    {
+      key: 'direction',
+      label: 'Dirección',
+      kind: 'select',
+      options: [
+        { value: 'row', label: 'En fila (al lado)' },
+        { value: 'column', label: 'En columna (abajo)' },
+      ],
+    },
+    {
+      key: 'gap',
+      label: 'Separación',
+      kind: 'select',
+      options: [
+        { value: 'none', label: 'Nada' },
+        { value: 'sm', label: 'Poca' },
+        { value: 'md', label: 'Media' },
+        { value: 'lg', label: 'Mucha' },
+      ],
+    },
+    {
+      key: 'justify',
+      label: 'Repartir',
+      kind: 'select',
+      options: [
+        { value: 'start', label: 'Al inicio' },
+        { value: 'center', label: 'Al centro' },
+        { value: 'end', label: 'Al final' },
+        { value: 'between', label: 'Separados a los extremos' },
+      ],
+    },
+    {
+      key: 'align',
+      label: 'Alinear',
+      kind: 'select',
+      options: [
+        { value: 'start', label: 'Arriba / izquierda' },
+        { value: 'center', label: 'Centro' },
+        { value: 'end', label: 'Abajo / derecha' },
+        { value: 'stretch', label: 'Estirar' },
+      ],
+    },
+    { key: 'wrap', label: 'Pasar a otra línea si no entra', kind: 'boolean' },
+    { key: 'stackOnMobile', label: 'En celular, uno abajo del otro', kind: 'boolean' },
+  ],
+  readQueries: [],
+  events: [],
+  component: { name: 'Stack', from: '@/components/blocks/stack' },
+  passProps: ['direction', 'gap', 'align', 'justify', 'wrap', 'stackOnMobile'],
+  container: 'flex',
+}
+
+registry.Repeater = {
+  type: 'Repeater',
+  label: 'Lista repetida',
+  description: 'Repite lo que pongas adentro por cada registro: tarjetas, galerías, listas',
+  icon: 'Repeat',
+  category: 'Contenedores',
+  defaultSpan: 12,
+  defaultProps: { emptyText: 'No hay nada para mostrar.' },
+  fields: [
+    { key: 'query', label: 'Repetir por cada registro de', kind: 'query', method: 'GET' },
+    { key: 'emptyText', label: 'Texto si no hay registros', kind: 'text' },
+  ],
+  readQueries: ['query'],
+  events: [],
+  component: { name: 'Repeater', from: '@/components/blocks/repeater' },
+  passProps: ['emptyText'],
+  container: 'grid',
 }

@@ -4,7 +4,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { Copy, GripVertical, Minus, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { cn } from '@panelkit/blocks'
-import { layoutClass, registry, spansFor, styleClass } from '@panelkit/exporter'
+import { layoutClass, registry, spansFor, styleClass, styleCss } from '@panelkit/exporter'
 import type { Node } from '@panelkit/schema'
 import { useCurrentPage, useEditor } from './store'
 import { BlockView, type RenderChildren } from './lib/render'
@@ -13,7 +13,8 @@ import { DeviceFrame } from './lib/device-frame'
 import { useDropHint } from './lib/drop-hint'
 import { focusInspector, useContextMenu } from './lib/context-menu'
 
-function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
+function SortableBlock({ node, mode = 'grid' }: { node: Node; mode?: 'grid' | 'list' | 'flex' }) {
+  const inList = mode === 'list'
   const selected = useEditor((s) => s.selectedId === node.id)
   const { select, setSpanFor, removeNode, duplicateNode, selectPage, project, openPicker } = useEditor()
   const openMenu = useContextMenu((m) => m.open)
@@ -25,7 +26,7 @@ function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
   // Hidden on this device: still shown (faded) so it can be selected and edited.
   const hiddenHere = Boolean(node.layout.hide?.includes(device))
   const hint = useDropHint((h) => (h.id === node.id ? h.zone : null))
-  const fullRow = inList || span === 12
+  const fullRow = inList || (mode === 'grid' && span === 12)
   const setSpan = (v: number) => setSpanFor(node.id, device, v)
 
   return (
@@ -33,7 +34,7 @@ function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       data-node-id={node.id}
-      className={cn(inList ? 'col-span-12' : layoutClass({ ...node.layout, hide: undefined }), hiddenHere && 'opacity-35', 'group relative', isDragging && 'z-10 opacity-60')}
+      className={cn(mode === 'list' ? 'col-span-12' : mode === 'flex' ? 'min-w-12' : layoutClass({ ...node.layout, hide: undefined }), hiddenHere && 'opacity-35', 'group relative', isDragging && 'z-10 opacity-60')}
       onClickCapture={(e) => {
         // Let the innermost block under the pointer take the click.
         const owner = (e.target as HTMLElement).closest('[data-node-id]')
@@ -44,6 +45,8 @@ function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
         }
         select(node.id)
       }}
+      // A click inside a block never reaches the canvas, which would clear the selection.
+      onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => {
         if ((e.target as HTMLElement).closest('[data-node-id]') !== e.currentTarget) return
         select(node.id)
@@ -63,7 +66,12 @@ function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
           selected ? 'outline outline-primary' : 'outline outline-transparent hover:outline-primary/30',
         )}
       >
-        <div className={styleClass(node.style)}>
+        {node.visibleIf?.trim() && (
+          <span className="pointer-events-none absolute -top-2.5 right-2 z-10 rounded-full border border-amber-500/40 bg-amber-50 px-1.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300" title={`Se muestra solo si: ${node.visibleIf}`}>
+            Condicional
+          </span>
+        )}
+        <div className={styleClass(node.style)} style={styleCss(node.style)}>
           <BlockView
             node={node}
             design
@@ -143,17 +151,29 @@ function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
 }
 
 /** Editable area inside a container: drop blocks here, reorder them, select them. */
-function NestedArea({ parent, layout }: { parent: Node; layout: 'grid' | 'list' }) {
+function NestedArea({ parent, layout }: { parent: Node; layout: 'grid' | 'list' | 'flex' }) {
+  const column = layout === 'flex' && parent.props.direction === 'column'
   const kids = parent.children ?? []
   const { setNodeRef, isOver } = useDroppable({ id: `drop:${parent.id}`, data: { kind: 'container', parentId: parent.id } })
   return (
     <div
       ref={setNodeRef}
-      className={cn('@container grid min-h-20 grid-cols-12 content-start gap-x-4 gap-y-10 rounded-xl p-1 pt-8 transition-colors', isOver && 'bg-primary/5 ring-2 ring-dashed ring-primary/40')}
+      className={cn(
+        'min-h-20 rounded-xl p-1 pt-8 transition-colors',
+        layout === 'flex'
+          ? cn(
+              'flex gap-x-4 gap-y-10',
+              column ? 'flex-col' : 'flex-wrap',
+              { start: 'items-start', center: 'items-center', end: 'items-end', stretch: 'items-stretch' }[String(parent.props.align ?? 'center')],
+              { start: 'justify-start', center: 'justify-center', end: 'justify-end', between: 'justify-between' }[String(parent.props.justify ?? 'start')],
+            )
+          : '@container grid grid-cols-12 content-start gap-x-4 gap-y-10',
+        isOver && 'bg-primary/5 ring-2 ring-dashed ring-primary/40',
+      )}
     >
       <SortableContext items={kids.map((n) => n.id)} strategy={rectSortingStrategy}>
         {kids.map((n) => (
-          <SortableBlock key={n.id} node={n} inList={layout === 'list'} />
+          <SortableBlock key={n.id} node={n} mode={layout} />
         ))}
       </SortableContext>
       {kids.length === 0 && (
@@ -162,7 +182,7 @@ function NestedArea({ parent, layout }: { parent: Node; layout: 'grid' | 'list' 
             e.stopPropagation()
             useEditor.getState().openPicker({ parentId: parent.id })
           }}
-          className="col-span-12 -mt-6 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-6 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+          className="col-span-12 -mt-6 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-6 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
         >
           <Plus className="size-3.5" /> Agregar bloque o arrastrá uno acá {layout === 'list' ? '(cada uno es una pestaña)' : ''}
         </button>

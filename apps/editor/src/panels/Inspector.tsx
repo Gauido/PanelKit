@@ -4,7 +4,8 @@ import { cn } from '@panelkit/blocks'
 import { registry, spansFor, type PropField } from '@panelkit/exporter'
 import { walkNodes, type Action, type Node, type Style } from '@panelkit/schema'
 import { Field, IconButton, Section, Select, TextInput, fieldClass } from '../lib/ui'
-import { useEditor, useSelectedNode } from '../store'
+import { useCurrentPage, useEditor, useSelectedNode } from '../store'
+import { fromExpr, ops, toExpr, type Condition, type Op } from '../lib/condition'
 
 type Col = { field: string; label: string; format?: string }
 type FF = Record<string, any>
@@ -23,9 +24,23 @@ function PropEditor({ node, f }: { node: Node; f: PropField }) {
 
   switch (f.kind) {
     case 'text':
-      return <Field label={f.label}><TextInput value={(value as string) ?? ''} onChange={(e) => set(e.target.value)} /></Field>
-    case 'textarea':
-      return <Field label={f.label}><textarea className={cn(fieldClass, 'h-20 py-1.5')} value={(value as string) ?? ''} onChange={(e) => set(e.target.value)} /></Field>
+    case 'textarea': {
+      const text = typeof value === 'string' ? value : value == null ? '' : JSON.stringify(value)
+      const insert = (token: string) => set(text ? `${text}${/\s$/.test(text) ? '' : ' '}${token}` : token)
+      return (
+        <div className="grid gap-1 text-[13px]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-muted-foreground">{f.label}</span>
+            <InsertData node={node} onInsert={insert} />
+          </div>
+          {f.kind === 'text' ? (
+            <TextInput value={text} onChange={(e) => set(e.target.value)} aria-label={f.label} />
+          ) : (
+            <textarea className={cn(fieldClass, 'h-20 py-1.5')} value={text} onChange={(e) => set(e.target.value)} aria-label={f.label} />
+          )}
+        </div>
+      )
+    }
     case 'number':
       return <Field label={f.label}><TextInput type="number" value={(value as number) ?? ''} onChange={(e) => set(e.target.value === '' ? undefined : Number(e.target.value))} /></Field>
     case 'boolean':
@@ -332,7 +347,7 @@ function ResponsiveEditor({ node }: { node: Node }) {
     <div className="grid gap-2">
       <span className="text-xs font-medium text-muted-foreground">Ancho y visibilidad por pantalla (de 12 columnas)</span>
       {deviceRows.map((d) => (
-        <div key={d.id} className="grid grid-cols-[72px_1fr_28px_auto] items-center gap-2 text-[12px]">
+        <div key={d.id} className="grid grid-cols-[64px_minmax(0,1fr)_24px_auto] items-center gap-2 text-[12px]">
           <span>{d.label}</span>
           <input
             type="range"
@@ -372,14 +387,180 @@ function StyleEditor({ node }: { node: Node }) {
   const updateNode = useEditor((s) => s.updateNode)
   const set = (p: Partial<Style>) => updateNode(node.id, (n) => void (n.style = { ...n.style, ...p }))
   const opt = (pairs: [string, string][]) => [{ value: '', label: 'Por defecto' }, ...pairs.map(([value, label]) => ({ value, label }))]
+  const pick = <K extends keyof Style>(key: K, label: string, pairs: [string, string][]) => (
+    <Field label={label}>
+      <Select value={(node.style[key] as string | undefined) ?? ''} onChange={(e) => set({ [key]: e.target.value || undefined } as Partial<Style>)} options={opt(pairs)} />
+    </Field>
+  )
   return (
-    <Section title="Estilo">
-      <ResponsiveEditor node={node} />
-      <Field label="Espaciado interno"><Select value={node.style.padding ?? ''} onChange={(e) => set({ padding: (e.target.value || undefined) as Style['padding'] })} options={opt([['none', 'Ninguno'], ['sm', 'Chico'], ['md', 'Medio'], ['lg', 'Grande']])} /></Field>
-      <Field label="Fondo"><Select value={node.style.background ?? ''} onChange={(e) => set({ background: (e.target.value || undefined) as Style['background'] })} options={opt([['muted', 'Gris suave'], ['primary', 'Color principal'], ['transparent', 'Transparente']])} /></Field>
-      <Field label="Alineación"><Select value={node.style.align ?? ''} onChange={(e) => set({ align: (e.target.value || undefined) as Style['align'] })} options={opt([['left', 'Izquierda'], ['center', 'Centro'], ['right', 'Derecha']])} /></Field>
-      <Field label="Sombra"><Select value={node.style.shadow ?? ''} onChange={(e) => set({ shadow: (e.target.value || undefined) as Style['shadow'] })} options={opt([['none', 'Sin sombra'], ['sm', 'Suave'], ['lg', 'Marcada']])} /></Field>
-      <Field label="Clases Tailwind (avanzado)"><TextInput value={node.style.className ?? ''} placeholder="ej: ring-1 ring-primary" onChange={(e) => set({ className: e.target.value || undefined })} /></Field>
+    <>
+      <Section title="Tamaño por dispositivo">
+        <ResponsiveEditor node={node} />
+      </Section>
+      <Section title="Caja">
+        <div className="grid grid-cols-2 gap-3">
+          {pick('padding', 'Espaciado interno', [['none', 'Ninguno'], ['sm', 'Chico'], ['md', 'Medio'], ['lg', 'Grande']])}
+          {pick('background', 'Fondo', [['muted', 'Gris suave'], ['primary', 'Color principal'], ['transparent', 'Transparente']])}
+          {pick('border', 'Borde', [['none', 'Sin borde'], ['default', 'Fino'], ['primary', 'Color principal'], ['dashed', 'Punteado']])}
+          {pick('radius', 'Esquinas', [['none', 'Rectas'], ['sm', 'Apenas'], ['md', 'Medias'], ['lg', 'Redondeadas'], ['xl', 'Muy redondeadas'], ['full', 'Círculo / píldora']])}
+          {pick('shadow', 'Sombra', [['none', 'Sin sombra'], ['sm', 'Suave'], ['lg', 'Marcada']])}
+        </div>
+      </Section>
+      <Section title="Texto">
+        <div className="grid grid-cols-2 gap-3">
+          {pick('textColor', 'Color', [['muted', 'Gris'], ['primary', 'Principal'], ['success', 'Verde'], ['warning', 'Ámbar'], ['danger', 'Rojo']])}
+          {pick('fontSize', 'Tamaño', [['xs', 'Muy chico'], ['sm', 'Chico'], ['base', 'Normal'], ['lg', 'Grande'], ['xl', 'Más grande'], ['2xl', 'Enorme'], ['3xl', 'Gigante'], ['4xl', 'Titular']])}
+          {pick('fontWeight', 'Grosor', [['normal', 'Normal'], ['medium', 'Medio'], ['semibold', 'Semi negrita'], ['bold', 'Negrita']])}
+          {pick('align', 'Alineación', [['left', 'Izquierda'], ['center', 'Centro'], ['right', 'Derecha']])}
+        </div>
+      </Section>
+      <section className="border-b border-border px-4 py-4">
+        <details open={Boolean(node.style.css || node.style.className)}>
+          <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Avanzado: CSS y clases</summary>
+          <div className="mt-3 grid gap-4">
+            <CssEditor node={node} />
+            <Field label="Clases Tailwind"><TextInput value={node.style.className ?? ''} placeholder="ej: ring-1 ring-primary" onChange={(e) => set({ className: e.target.value || undefined })} /></Field>
+          </div>
+        </details>
+      </section>
+    </>
+  )
+}
+
+/** Any CSS property as name / value rows, for what the options don't cover. */
+function CssEditor({ node }: { node: Node }) {
+  const updateNode = useEditor((s) => s.updateNode)
+  const rows = Object.entries(node.style.css ?? {})
+  const save = (next: [string, string][]) =>
+    updateNode(node.id, (n) => {
+      const css = Object.fromEntries(next)
+      n.style = { ...n.style, css: Object.keys(css).length ? css : undefined }
+    })
+  return (
+    <div className="grid gap-2">
+      {rows.map(([k, v], i) => (
+        <div key={i} className="flex gap-1.5">
+          <TextInput className="font-mono text-[12px]" value={k} placeholder="propiedad" onChange={(e) => save(rows.map((r, j) => (j === i ? [e.target.value, r[1]] : r)))} />
+          <TextInput className="font-mono text-[12px]" value={v} placeholder="valor" onChange={(e) => save(rows.map((r, j) => (j === i ? [r[0], e.target.value] : r)))} />
+          <button className="rounded-md px-2 text-muted-foreground hover:bg-muted hover:text-rose-600" onClick={() => save(rows.filter((_, j) => j !== i))} aria-label="Quitar">
+            ×
+          </button>
+        </div>
+      ))}
+      <button className="justify-self-start text-[13px] font-medium text-primary hover:underline" onClick={() => save([...rows, [rows.some(([k]) => k === '') ? `prop${rows.length}` : '', '']])}>
+        + Agregar propiedad
+      </button>
+      <p className="text-[11px] text-muted-foreground">Cualquier propiedad CSS: <code>min-height: 320px</code>, <code>background: linear-gradient(...)</code>, <code>border-left: 4px solid #22c55e</code>.</p>
+    </div>
+  )
+}
+
+/** Blocks that contain `id`, outermost first. */
+function ancestorsOf(nodes: Node[], id: string, trail: Node[] = []): Node[] | null {
+  for (const n of nodes) {
+    if (n.id === id) return trail
+    const hit = n.children && ancestorsOf(n.children, id, [...trail, n])
+    if (hit) return hit
+  }
+  return null
+}
+
+/** What a block can read: the current record inside a Lista repetida, and the page variables. */
+function useScopeSources(node: Node): { value: string; label: string }[] {
+  const project = useEditor((s) => s.project)
+  const page = useCurrentPage()
+  const vars = new Set(Object.keys(page.state ?? {}))
+  for (const n of walkNodes(page.children)) {
+    if (n.type === 'Filter') vars.add(String(n.props.stateKey || 'filtro'))
+    for (const list of Object.values(n.events)) for (const a of list) if (a.type === 'setState' && a.key) vars.add(a.key)
+  }
+  const repeater = [...(ancestorsOf(page.children, node.id) ?? [])].reverse().find((a) => a.type === 'Repeater')
+  const itemFields = repeater ? (project.queries.find((q) => q.id === repeater.props.query)?.fields ?? []) : []
+  return [
+    ...itemFields.map((f) => ({ value: `item.${f}`, label: `Registro → ${f}` })),
+    ...[...vars].map((v) => ({ value: `state.${v}`, label: `Variable → ${v}` })),
+  ]
+}
+
+/** "+ Dato": puts {{item.x}} / {{state.x}} into a text without typing the braces. */
+function InsertData({ node, onInsert }: { node: Node; onInsert: (token: string) => void }) {
+  const sources = useScopeSources(node)
+  if (!sources.length) return null
+  return (
+    <select
+      value=""
+      onChange={(e) => e.target.value && onInsert(`{{${e.target.value}}}`)}
+      className="h-6 rounded-md border border-border bg-background px-1 text-[11px] text-primary"
+      aria-label="Insertar un dato"
+      title="Insertar un dato que cambia (de la lista o de una variable)"
+    >
+      <option value="">+ Dato</option>
+      {sources.map((s) => (
+        <option key={s.value} value={s.value}>
+          {s.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/** Layer name and "show only if", built from lists (code only under Avanzado). */
+function VisibilityEditor({ node }: { node: Node }) {
+  const updateNode = useEditor((s) => s.updateNode)
+  const project = useEditor((s) => s.project)
+  const page = useCurrentPage()
+  const parsed = fromExpr(node.visibleIf)
+  const [mode, setMode] = useState<'always' | 'simple' | 'code'>(() => (!node.visibleIf?.trim() ? 'always' : parsed ? 'simple' : 'code'))
+
+  const sources = useScopeSources(node)
+  const cond: Condition = parsed ?? { left: sources[0]?.value ?? 'state.', op: 'eq', value: '' }
+  if (cond.left && !sources.some((s) => s.value === cond.left)) sources.push({ value: cond.left, label: cond.left.replace(/^item\./, 'Registro → ').replace(/^state\./, 'Variable → ') })
+  const save = (expr: string | undefined) => updateNode(node.id, (n) => void (n.visibleIf = expr || undefined))
+  const setCond = (patch: Partial<Condition>) => save(toExpr({ ...cond, ...patch }))
+  const op = ops.find((o) => o.value === cond.op)!
+
+  return (
+    <Section title="Nombre y visibilidad">
+      <Field label="Nombre en Capas">
+        <TextInput value={node.name ?? ''} placeholder={registry[node.type]?.label ?? node.type} onChange={(e) => updateNode(node.id, (n) => void (n.name = e.target.value || undefined))} />
+      </Field>
+      <Field label="Mostrar este bloque">
+        <Select
+          value={mode}
+          onChange={(e) => {
+            const m = e.target.value as typeof mode
+            setMode(m)
+            if (m === 'always') save(undefined)
+            if (m === 'simple' && !parsed) save(sources.length ? toExpr(cond) : undefined)
+          }}
+          options={[
+            { value: 'always', label: 'Siempre' },
+            { value: 'simple', label: 'Solo si se cumple algo' },
+            { value: 'code', label: 'Avanzado: con código' },
+          ]}
+        />
+      </Field>
+      {mode === 'simple' &&
+        (sources.length ? (
+          <div className="grid gap-2 rounded-lg border border-border bg-muted/40 p-3">
+            <Select value={cond.left} onChange={(e) => setCond({ left: e.target.value })} options={sources} />
+            <Select value={cond.op} onChange={(e) => setCond({ op: e.target.value as Op })} options={ops.map((o) => ({ value: o.value, label: o.label }))} />
+            {op.needsValue && <TextInput value={cond.value} placeholder="valor, ej: Pagada" onChange={(e) => setCond({ value: e.target.value })} />}
+            <p className="text-[11px] text-muted-foreground">
+              Se ve solo cuando <b>{sources.find((s) => s.value === cond.left)?.label ?? cond.left}</b> {op.label}
+              {op.needsValue && <> «{cond.value}»</>}.
+            </p>
+          </div>
+        ) : (
+          <p className="rounded-lg bg-muted p-3 text-[11px] text-muted-foreground">
+            Todavía no hay nada para mirar. Agregá un Filtro, una acción “Guardar en variable”, o poné este bloque adentro de una Lista repetida.
+          </p>
+        ))}
+      {mode === 'code' && (
+        <Field label="Condición en JavaScript" hint="Usá state.x para variables e item.x dentro de una Lista repetida.">
+          <TextInput className="font-mono text-[12px]" value={node.visibleIf ?? ''} placeholder="ej: state.turno?.status === 'Pendiente'" onChange={(e) => save(e.target.value)} />
+        </Field>
+      )}
     </Section>
   )
 }
@@ -425,6 +606,7 @@ export function Inspector() {
           ))}
         </Section>
       )}
+      {tab === 'Propiedades' && <VisibilityEditor key={node.id} node={node} />}
       {tab === 'Estilo' && <StyleEditor node={node} />}
       {tab === 'Eventos' && <EventsEditor node={node} />}
       {tab === 'JSON' && (

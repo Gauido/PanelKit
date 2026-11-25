@@ -1,27 +1,34 @@
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
-import { AppShell, Reveal, cn } from '@panelkit/blocks'
-import { layoutClass, registry, styleClass } from '@panelkit/exporter'
+import { AppShell, Reveal, cn, whenText } from '@panelkit/blocks'
+import { layoutClass, registry, styleClass, styleCss } from '@panelkit/exporter'
 import type { Page } from '@panelkit/schema'
 import { BlockView } from './lib/render'
-import { PageStateProvider } from './lib/page-state'
+import { PageStateProvider, usePage } from './lib/page-state'
 import { DeviceFrame } from './lib/device-frame'
 import { useCurrentPage, useEditor } from './store'
 
-function PreviewPage({ page }: { page: Page }) {
+function PageBody({ page }: { page: Page }) {
   const navigate = useNavigate()
+  const { state } = usePage()
+  return (
+    <div className="@container grid grid-cols-12 gap-4 @3xl:gap-6">
+      {page.children.map((n, i) =>
+        registry[n.type]?.container === 'overlay' ? (
+          <BlockView key={n.id} node={n} live onNavigate={(to) => navigate(to)} />
+        ) : whenText(n.visibleIf, { state }) ? (
+          <Reveal key={n.id} index={i} className={`${layoutClass(n.layout)} ${styleClass(n.style)}`} style={styleCss(n.style)}>
+            <BlockView node={n} live onNavigate={(to) => navigate(to)} />
+          </Reveal>
+        ) : null,
+      )}
+    </div>
+  )
+}
+
+function PreviewPage({ page }: { page: Page }) {
   return (
     <PageStateProvider initial={page.state ?? {}}>
-      <div className="@container grid grid-cols-12 gap-4 @3xl:gap-6">
-        {page.children.map((n, i) =>
-          registry[n.type]?.container === 'overlay' ? (
-            <BlockView key={n.id} node={n} live onNavigate={(to) => navigate(to)} />
-          ) : (
-            <Reveal key={n.id} index={i} className={`${layoutClass(n.layout)} ${styleClass(n.style)}`}>
-              <BlockView node={n} live onNavigate={(to) => navigate(to)} />
-            </Reveal>
-          ),
-        )}
-      </div>
+      <PageBody page={page} />
     </PageStateProvider>
   )
 }

@@ -70,8 +70,15 @@ export const Style = z.object({
   background: z.enum(['default', 'muted', 'primary', 'transparent']).optional(),
   align: z.enum(['left', 'center', 'right']).optional(),
   shadow: z.enum(['none', 'sm', 'lg']).optional(),
+  textColor: z.enum(['default', 'muted', 'primary', 'success', 'warning', 'danger']).optional(),
+  fontSize: z.enum(['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl']).optional(),
+  fontWeight: z.enum(['normal', 'medium', 'semibold', 'bold']).optional(),
+  radius: z.enum(['none', 'sm', 'md', 'lg', 'xl', 'full']).optional(),
+  border: z.enum(['none', 'default', 'primary', 'dashed']).optional(),
   /** Escape hatch for people who know Tailwind. */
   className: z.string().optional(),
+  /** Any CSS property, for whatever the options above don't cover: { "min-height": "300px" }. */
+  css: z.record(z.string(), z.string()).optional(),
 })
 export type Style = z.infer<typeof Style>
 
@@ -82,6 +89,10 @@ export type Node = {
   props: Record<string, unknown>
   style: Style
   events: Record<string, Action[]>
+  /** Name shown in the layers panel. */
+  name?: string
+  /** JavaScript condition; the block only shows when it's true. E.g. state.turno?.status === 'Pagada' */
+  visibleIf?: string
   /** Blocks inside a container (Section, Tabs, Modal, Drawer). */
   children?: Node[]
 }
@@ -94,6 +105,8 @@ export const Node: z.ZodType<Node, any> = z.lazy(() =>
     props: z.record(z.string(), z.unknown()).default({}),
     style: Style.default({}),
     events: z.record(z.string(), z.array(Action)).default({}),
+    name: z.string().optional(),
+    visibleIf: z.string().optional(),
     children: z.array(Node).optional(),
   }),
 )

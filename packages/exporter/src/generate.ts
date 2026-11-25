@@ -1,6 +1,6 @@
 import { envVars, openKey, walkNodes, type Action, type Node, type Page, type Project } from '@panelkit/schema'
 import { blockFor } from './registry'
-import { layoutClass, styleClass } from './layout'
+import { layoutClass, styleClass, styleCss } from './layout'
 import { camel, hasTemplate, jsxAttr, kebab, pascal, toJs } from './codegen'
 import { devDeps, runtimeDeps } from './versions'
 import { fonts, themeVars } from './themes'
@@ -56,6 +56,8 @@ function apiClient(project: Project): string {
 }
 
 type PageCtx = {
+  /** Inside a Lista repetida: templates and code can read `item` and `index`. */
+  inItem?: boolean
   imports: Map<string, Set<string>>
   hooks: string[]
   needsNavigate: boolean
@@ -75,7 +77,7 @@ const STATE_ACTIONS = new Set(['setState', 'openModal', 'closeModal', 'runCode']
 function pageUsesState(project: Project, page: Page): boolean {
   if (Object.keys(page.state ?? {}).length) return true
   for (const n of walkNodes(page.children)) {
-    if (blockFor(n)?.container === 'overlay' || n.type === 'Filter') return true
+    if (blockFor(n)?.container === 'overlay' || n.type === 'Filter' || conditionOf(n)) return true
     if (JSON.stringify(n.props).includes('{{state.')) return true
     for (const key of blockFor(n)?.readQueries ?? []) {
       const q = project.queries.find((x) => x.id === n.props[key])
@@ -91,7 +93,7 @@ function pageUsesState(project: Project, page: Page): boolean {
 const indent = (lines: string[], by = 1) => lines.map((l) => (l ? '  '.repeat(by) + l : l))
 
 function scopeOf(arg: string | undefined, ctx: PageCtx): string {
-  const parts = [arg, ctx.usesState ? 'state: page.get()' : undefined].filter(Boolean)
+  const parts = [arg, ctx.usesState ? 'state: page.get()' : undefined, ctx.inItem ? 'item, index' : undefined].filter(Boolean)
   return parts.length ? `{ ${parts.join(', ')} }` : '{}'
 }
 
@@ -159,13 +161,14 @@ function actionLines(project: Project, actions: Action[], arg: string | undefine
 
 /** A prop value as JSX, resolving {{state.x}} at render time. */
 function propAttr(key: string, value: unknown, ctx: PageCtx): string | null {
-  if (!hasTemplate(value) || !ctx.usesState) return jsxAttr(key, value, 0)
+  if (!hasTemplate(value) || (!ctx.usesState && !ctx.inItem)) return jsxAttr(key, value, 0)
+  const scope = `{ ${[ctx.usesState && 'state', ctx.inItem && 'item, index'].filter(Boolean).join(', ')} }`
   if (typeof value === 'string' && !/^\{\{\s*[\w.]+\s*\}\}$/.test(value)) {
     addImport(ctx, '@/lib/template', 'tpl')
-    return `${key}={tpl(${toJs(value)}, { state })}`
+    return `${key}={tpl(${toJs(value)}, ${scope})}`
   }
   addImport(ctx, '@/lib/template', 'bind')
-  return `${key}={bind(${toJs(value, 0)}, { state })}`
+  return `${key}={bind(${toJs(value, 0)}, ${scope})}`
 }
 
 /** Declares (once per page) the hook that loads a GET query and returns its variable name. */
@@ -189,6 +192,33 @@ function queryHook(project: Project, qid: string, ctx: PageCtx): string | undefi
   return v
 }
 
+/** className (+ style for free CSS) of the box around a block. */
+function boxAttrs(node: Node, withLayout: boolean): string {
+  const cls = [withLayout && layoutClass(node.layout), styleClass(node.style)].filter(Boolean).join(' ')
+  const css = styleCss(node.style)
+  return [cls && `className="${cls}"`, css && `style={${toJs(css)}}`].filter(Boolean).join(' ')
+}
+
+/** A valid JS condition, or undefined (empty or broken: the block always shows). */
+export function conditionOf(node: Node): string | undefined {
+  const expr = node.visibleIf?.trim()
+  if (!expr) return undefined
+  try {
+    new Function('state', `return (${expr})`)
+    return expr
+  } catch {
+    return undefined
+  }
+}
+
+/** Wraps JSX lines so they only render when the block's condition holds. */
+function guard(node: Node, lines: string[], ctx: PageCtx): string[] {
+  const cond = conditionOf(node)
+  if (!cond) return lines
+  addImport(ctx, '@/lib/state', 'when')
+  return [`{when(() => ${cond}) && (`, ...indent(lines), ')}']
+}
+
 function blockLines(project: Project, node: Node, ctx: PageCtx): string[] {
   const def = blockFor(node)
   if (!def) return [`{/* Unknown block "${node.type}" */}`]
@@ -198,7 +228,7 @@ function blockLines(project: Project, node: Node, ctx: PageCtx): string[] {
     const a = def.type === 'HtmlBlock' ? jsxAttr(key, node.props[key], 0) : propAttr(key, node.props[key], ctx)
     if (a) attrs.push(a)
   }
-  if (def.type === 'HtmlBlock' && ctx.usesState && hasTemplate(node.props.html)) attrs.push('scope={{ state }}')
+  if (def.type === 'HtmlBlock' && (ctx.usesState || ctx.inItem) && hasTemplate(node.props.html)) attrs.push(`scope={{ ${[ctx.usesState && 'state', ctx.inItem && 'item, index'].filter(Boolean).join(', ')} }}`)
   for (const key of def.readQueries) {
     const qid = node.props[key]
     if (typeof qid !== 'string') continue
@@ -238,24 +268,31 @@ function blockLines(project: Project, node: Node, ctx: PageCtx): string[] {
   const attrLines = multi ? indent(attrs.flatMap((a) => a.split('\n'))) : []
   const inline = attrs.length ? ' ' + attrs.join(' ') : ''
   if (!def.container) return multi ? [`<${name}`, ...attrLines, '/>'] : [`<${name}${inline} />`]
+  const repeats = def.type === 'Repeater'
+  const outer = ctx.inItem
+  if (repeats) ctx.inItem = true
   const inner = kids.flatMap((c) => {
     if (def.container === 'tabs') {
-      const cls = styleClass(c.style)
-      return cls ? [`<div className="${cls}">`, ...indent(blockLines(project, c, ctx)), '</div>'] : blockLines(project, c, ctx)
+      // Every child is a tab: keep the tab, hide only its content.
+      const attrs = boxAttrs(c, false)
+      return [`<div${attrs ? ' ' + attrs : ''}>`, ...indent(guard(c, blockLines(project, c, ctx), ctx)), '</div>']
     }
     if (blockFor(c)?.container === 'overlay') return blockLines(project, c, ctx)
-    const cls = [layoutClass(c.layout), styleClass(c.style)].filter(Boolean).join(' ')
-    return [`<div className="${cls}">`, ...indent(blockLines(project, c, ctx)), '</div>']
+    // In a flex row/column the child sizes itself; on a grid it takes its columns.
+    const attrs = boxAttrs(c, def.container !== 'flex')
+    return guard(c, [`<div${attrs ? ' ' + attrs : ''}>`, ...indent(blockLines(project, c, ctx)), '</div>'], ctx)
   })
+  ctx.inItem = outer
   const open = multi ? [`<${name}`, ...attrLines, '>'] : [`<${name}${inline}>`]
-  return [...open, ...indent(inner), `</${name}>`]
+  // A Lista repetida gets a function: its blocks render once per row.
+  const body = repeats ? ['{(item, index) => (', ...indent(['<>', ...indent(inner), '</>']), ')}'] : inner
+  return [...open, ...indent(body), `</${name}>`]
 }
 
 function nodeJsx(project: Project, node: Node, index: number, ctx: PageCtx): string {
   // Modals and drawers render in a portal: no grid cell, no entrance animation wrapper.
   if (blockFor(node)?.container === 'overlay') return indent(blockLines(project, node, ctx), 3).join('\n')
-  const cls = [layoutClass(node.layout), styleClass(node.style)].filter(Boolean).join(' ')
-  const lines = [`<Reveal index={${index}} className="${cls}">`, ...indent(blockLines(project, node, ctx)), '</Reveal>']
+  const lines = guard(node, [`<Reveal index={${index}} ${boxAttrs(node, true)}>`, ...indent(blockLines(project, node, ctx)), '</Reveal>'], ctx)
   return indent(lines, 3).join('\n')
 }
 
