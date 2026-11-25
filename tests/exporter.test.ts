@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { crmTemplate, envVars, inferFields, Project, templates, turnosTemplate } from '../packages/schema/src'
 import { generate } from '../packages/exporter/src'
-import { readRuntime } from '../scripts/export-sample'
+import { crmWithLogin, readRuntime } from '../scripts/export-sample'
 
 describe('schema', () => {
   it('parses every template', () => {
@@ -177,6 +177,39 @@ describe('free layout, conditions and repeaters', () => {
   it('ignores a broken condition instead of breaking the build', async () => {
     const { conditionOf } = await import('../packages/exporter/src/generate')
     expect(conditionOf({ id: 'x', type: 'Text', layout: { span: 12 }, props: {}, style: {}, events: {}, visibleIf: 'state.(' })).toBeUndefined()
+  })
+})
+
+describe('login and roles', () => {
+  const files = generate(crmWithLogin(), readRuntime())
+  const main = files['src/main.tsx']!
+  const dash = files['src/pages/dashboard.tsx']!
+
+  it('asks to sign in and filters the menu by role', () => {
+    expect(main).toContain('if (!session) {')
+    expect(main).toContain('login(datosDeEjemplo, authConfig, email, password)')
+    expect(main).toContain('hint="Para probar: admin@demo.com / demo123"')
+    expect(main).toContain("nav.filter((item) => hasRole(session, item.roles, authConfig.roleField))")
+    expect(main).toContain("<Guard roles={['admin']}><TareasPage /></Guard>")
+    expect(files['src/lib/auth-config.ts']).toContain("roleField: 'role'")
+  })
+
+  it('limits blocks to roles and reads the signed-in user', () => {
+    expect(dash).toContain('const user = useSession()?.user ?? {}')
+    expect(dash).toContain('const can = useCan()')
+    expect(dash).toContain("{can(['admin']) && (")
+    expect(dash).toContain("tpl('Hola, {{user.name}}', { user })")
+  })
+})
+
+describe('demo login', async () => {
+  const { createMockApi } = await import('../packages/blocks/src/lib/api')
+  it('checks the users table and never returns the password', async () => {
+    const api = createMockApi({ users: [{ id: 1, email: 'a@b.com', password: 'x', role: 'admin' }] })
+    const res = (await api.request('POST', '/auth/login', { email: 'A@b.com', password: 'x' })) as { token: string; user: Record<string, unknown> }
+    expect(res.token).toBe('demo-1')
+    expect(res.user).toEqual({ id: 1, email: 'a@b.com', role: 'admin' })
+    await expect(api.request('POST', '/auth/login', { email: 'a@b.com', password: 'mal' })).rejects.toThrow(/incorrectos/)
   })
 })
 

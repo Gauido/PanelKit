@@ -6,6 +6,7 @@ import { walkNodes, type Action, type Node, type Style } from '@panelkit/schema'
 import { Field, IconButton, Section, Select, TextInput, fieldClass } from '../lib/ui'
 import { useCurrentPage, useEditor, useSelectedNode } from '../store'
 import { fromExpr, ops, toExpr, type Condition, type Op } from '../lib/condition'
+import { RolePicker } from './Pages'
 
 type Col = { field: string; label: string; format?: string }
 type FF = Record<string, any>
@@ -223,6 +224,7 @@ const actionLabels: Record<Action['type'], string> = {
   setState: 'Guardar en una variable',
   openModal: 'Abrir modal / panel',
   closeModal: 'Cerrar modal / panel',
+  logout: 'Cerrar sesión',
   runCode: 'Ejecutar código propio',
   navigate: 'Ir a una página',
   toast: 'Mostrar un aviso',
@@ -244,6 +246,7 @@ function defaultAction(type: Action['type'], firstQuery: string, firstPath: stri
     case 'setState': return { type, key: 'seleccionado', value: '{{row}}' }
     case 'openModal': return { type, target: '' }
     case 'closeModal': return { type, target: '' }
+    case 'logout': return { type }
     case 'runCode': return { type, code: "// row, values, state, setState, apis, navigate, toast, refresh\ntoast('Hola ' + (row?.name ?? ''))" }
     case 'navigate': return { type, to: firstPath }
     case 'toast': return { type, message: 'Listo', tone: 'success' }
@@ -476,9 +479,11 @@ function useScopeSources(node: Node): { value: string; label: string }[] {
   }
   const repeater = [...(ancestorsOf(page.children, node.id) ?? [])].reverse().find((a) => a.type === 'Repeater')
   const itemFields = repeater ? (project.queries.find((q) => q.id === repeater.props.query)?.fields ?? []) : []
+  const userFields = project.auth.enabled ? [...new Set(['name', 'email', project.auth.roleField])] : []
   return [
     ...itemFields.map((f) => ({ value: `item.${f}`, label: `Registro → ${f}` })),
     ...[...vars].map((v) => ({ value: `state.${v}`, label: `Variable → ${v}` })),
+    ...userFields.map((f) => ({ value: `user.${f}`, label: `Usuario → ${f}` })),
   ]
 }
 
@@ -524,6 +529,14 @@ function VisibilityEditor({ node }: { node: Node }) {
       <Field label="Nombre en Capas">
         <TextInput value={node.name ?? ''} placeholder={registry[node.type]?.label ?? node.type} onChange={(e) => updateNode(node.id, (n) => void (n.name = e.target.value || undefined))} />
       </Field>
+      {project.auth.enabled && (
+        <RolePicker
+          label="Quién lo ve"
+          roles={project.auth.roles}
+          value={node.roles ?? []}
+          onChange={(roles) => updateNode(node.id, (n) => void (n.roles = roles.length ? roles : undefined))}
+        />
+      )}
       <Field label="Mostrar este bloque">
         <Select
           value={mode}

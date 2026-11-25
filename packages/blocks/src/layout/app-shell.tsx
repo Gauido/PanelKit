@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { BarChart3, Briefcase, CalendarDays, LayoutDashboard, LayoutGrid, Moon, Settings, Sun, Users, type LucideIcon } from 'lucide-react'
+import { BarChart3, Briefcase, CalendarDays, LayoutDashboard, LayoutGrid, LogOut, Moon, Settings, Sun, Users, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { cn } from '../lib/utils'
@@ -19,7 +19,9 @@ export function useDarkMode(initial: 'light' | 'dark' | 'system' = 'system') {
   return [dark, setDark] as const
 }
 
-export function AppShell({ name, nav, mode = 'system', children }: { name: string; nav: NavItem[]; mode?: 'light' | 'dark' | 'system'; children?: ReactNode }) {
+export type ShellUser = { name?: string; email?: string; role?: string }
+
+export function AppShell({ name, nav, mode = 'system', user, onLogout, children }: { name: string; nav: NavItem[]; mode?: 'light' | 'dark' | 'system'; user?: ShellUser | null; onLogout?: () => void; children?: ReactNode }) {
   const [dark, setDark] = useDarkMode(mode)
   const location = useLocation()
 
@@ -67,6 +69,22 @@ export function AppShell({ name, nav, mode = 'system', children }: { name: strin
           {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
           {dark ? 'Modo claro' : 'Modo oscuro'}
         </button>
+        {user && (
+          <div className="mt-2 flex items-center gap-2.5 border-t border-border px-2 pt-3">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+              {(user.name || user.email || '?').slice(0, 1).toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{user.name || user.email}</span>
+              {user.role && <span className="block truncate text-[11px] text-muted-foreground">{user.role}</span>}
+            </span>
+            {onLogout && (
+              <button onClick={onLogout} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Salir" title="Salir">
+                <LogOut className="size-4" />
+              </button>
+            )}
+          </div>
+        )}
       </aside>
       <main className="min-w-0 flex-1">
         <nav className="flex gap-1 overflow-x-auto border-b border-border p-2 @3xl/shell:hidden">
@@ -75,6 +93,11 @@ export function AppShell({ name, nav, mode = 'system', children }: { name: strin
               {item.title}
             </NavLink>
           ))}
+          {user && onLogout && (
+            <button onClick={onLogout} className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm whitespace-nowrap text-muted-foreground" aria-label="Salir">
+              <LogOut className="size-4" /> Salir
+            </button>
+          )}
         </nav>
         <AnimatePresence mode="wait">
           <motion.div

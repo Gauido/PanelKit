@@ -39,7 +39,7 @@ export function toExpr(c: Condition): string {
   }
 }
 
-const PATH = '((?:state|item)(?:\\??\\.[\\w$]+)*)'
+const PATH = '((?:state|item|user)(?:\\??\\.[\\w$]+)*)'
 const unquote = (v: string) => {
   const single = v.match(/^'(.*)'$/)
   if (single) return single[1]!.replace(/\\'/g, "'")

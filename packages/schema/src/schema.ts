@@ -55,6 +55,7 @@ export const Action = z.discriminatedUnion('type', [
   /** Opens or closes a Modal / Drawer block of this page. */
   z.object({ type: z.literal('openModal'), target: z.string() }),
   z.object({ type: z.literal('closeModal'), target: z.string() }),
+  z.object({ type: z.literal('logout') }),
   /** Escape hatch: your own JavaScript, with the event data, state, APIs and helpers in scope. */
   z.object({ type: z.literal('runCode'), code: z.string() }),
   z.object({ type: z.literal('navigate'), to: z.string() }),
@@ -93,6 +94,8 @@ export type Node = {
   name?: string
   /** JavaScript condition; the block only shows when it's true. E.g. state.turno?.status === 'Pagada' */
   visibleIf?: string
+  /** Only these roles see the block. Empty = everyone. */
+  roles?: string[]
   /** Blocks inside a container (Section, Tabs, Modal, Drawer). */
   children?: Node[]
 }
@@ -107,6 +110,7 @@ export const Node: z.ZodType<Node, any> = z.lazy(() =>
     events: z.record(z.string(), z.array(Action)).default({}),
     name: z.string().optional(),
     visibleIf: z.string().optional(),
+    roles: z.array(z.string()).optional(),
     children: z.array(Node).optional(),
   }),
 )
@@ -129,9 +133,29 @@ export const Page = z.object({
   icon: z.string().default('LayoutDashboard'),
   /** Initial values of the page variables ({{state.x}}). */
   state: z.record(z.string(), z.unknown()).default({}),
+  /** Roles that can open the page. Empty = anyone who signed in (or everyone, without login). */
+  roles: z.array(z.string()).optional(),
   children: z.array(Node).default([]),
 })
 export type Page = z.infer<typeof Page>
+
+/** Sign in with email and password against the project's own API. */
+export const Auth = z.object({
+  enabled: z.boolean().default(false),
+  /** Data source that receives the login call. */
+  source: z.string().default(''),
+  loginPath: z.string().default('/auth/login'),
+  /** Names the API expects in the login body. */
+  emailField: z.string().default('email'),
+  passwordField: z.string().default('password'),
+  /** Where the token and the user are in the response ("data.token" style paths). */
+  tokenPath: z.string().default('token'),
+  userPath: z.string().default('user'),
+  /** Field of the user that holds its role. */
+  roleField: z.string().default('role'),
+  roles: z.array(z.string()).default(['admin']),
+})
+export type Auth = z.infer<typeof Auth>
 
 export const FONTS = ['Inter', 'Geist', 'Plus Jakarta Sans', 'DM Sans', 'Manrope', 'Space Grotesk', 'Outfit'] as const
 
@@ -169,6 +193,7 @@ export const Project = z.object({
   dependencies: z.array(Dependency).default([]),
   /** Global CSS appended last, in the editor and in the export. */
   customCss: z.string().default(''),
+  auth: Auth.default({ enabled: false, source: '', loginPath: '/auth/login', emailField: 'email', passwordField: 'password', tokenPath: 'token', userPath: 'user', roleField: 'role', roles: ['admin'] }),
 })
 export type Project = z.infer<typeof Project>
 
