@@ -141,6 +141,27 @@ type State = {
   updateNode: (id: string, fn: (node: Node) => void) => void
   removeNode: (id: string) => void
   duplicateNode: (id: string) => void
+  /** Copied block (with its children), pasted with fresh ids. */
+  clipboard: Node | null
+  copyNode: (id: string) => void
+  pasteNode: (target?: DropTarget) => void
+  /** Moves a block one place earlier (-1) or later (+1) among its siblings. */
+  nudgeNode: (id: string, by: -1 | 1) => void
+  /** Puts a block inside a new Section, in the same place. */
+  wrapInSection: (id: string) => void
+  /** Takes the blocks out of a container and puts them where the container was. */
+  unwrapNode: (id: string) => void
+  setSpanFor: (id: string, device: Device, span: number) => void
+  /** Moves a block (and what's inside it) to the end of another page. */
+  moveToPage: (id: string, pageId: string) => void
+  /** Copied look (style + widths) to paste onto other blocks. */
+  styleClipboard: Pick<Node, 'style' | 'layout'> | null
+  copyStyle: (id: string) => void
+  pasteStyle: (id: string) => void
+  toggleHidden: (id: string, device: Device) => void
+  /** Block picker ("+" buttons, right click > Agregar). null = closed. */
+  picker: DropTarget | null
+  openPicker: (target: DropTarget | null) => void
   addPage: () => void
   removePage: (id: string) => void
   reset: () => void
@@ -302,6 +323,95 @@ export const useEditor = create<State>((set, get) => {
       })
       if (copyId) set({ selectedId: copyId })
     },
+    clipboard: null,
+    copyNode: (id) => {
+      for (const page of get().project.pages) {
+        const n = findNode(page.children, id)
+        if (n) return set({ clipboard: structuredClone(n) })
+      }
+    },
+    pasteNode: (target) => {
+      const clip = get().clipboard
+      if (!clip) return
+      const copy = freshIds(structuredClone(clip))
+      get().update((p) => {
+        const { list, index } = targetList(currentPage(p), target)
+        list.splice(index, 0, copy)
+      })
+      set({ selectedId: copy.id })
+    },
+    nudgeNode: (id, by) =>
+      get().update((p) => {
+        const hit = locate(currentPage(p).children, id)
+        if (!hit) return
+        const to = hit.index + by
+        if (to < 0 || to >= hit.list.length) return
+        const [n] = hit.list.splice(hit.index, 1)
+        hit.list.splice(to, 0, n!)
+      }),
+    wrapInSection: (id) => {
+      const section = makeNode('Section')
+      if (!section) return
+      get().update((p) => {
+        const hit = locate(currentPage(p).children, id)
+        if (!hit) return
+        const inner = hit.list[hit.index]!
+        section.layout = { ...inner.layout }
+        inner.layout = { span: 12 }
+        section.children = [inner]
+        hit.list.splice(hit.index, 1, section)
+      })
+      set({ selectedId: section.id })
+    },
+    unwrapNode: (id) =>
+      get().update((p) => {
+        const hit = locate(currentPage(p).children, id)
+        if (!hit) return
+        const n = hit.list[hit.index]!
+        hit.list.splice(hit.index, 1, ...(n.children ?? []))
+      }),
+    setSpanFor: (id, device, span) =>
+      get().updateNode(id, (n) => {
+        const v = Math.min(12, Math.max(1, span))
+        if (device === 'desktop') n.layout.span = v
+        else if (device === 'tablet') n.layout.spanTablet = v
+        else n.layout.spanMobile = v
+      }),
+    toggleHidden: (id, device) =>
+      get().updateNode(id, (n) => {
+        const hide = new Set(n.layout.hide ?? [])
+        if (hide.has(device)) hide.delete(device)
+        else hide.add(device)
+        n.layout.hide = hide.size ? [...hide] : undefined
+      }),
+    moveToPage: (id, pageId) => {
+      get().update((p) => {
+        const to = p.pages.find((x) => x.id === pageId)
+        if (!to) return
+        for (const page of p.pages) {
+          const hit = locate(page.children, id)
+          if (hit) {
+            const [n] = hit.list.splice(hit.index, 1)
+            to.children.push(n!)
+            return
+          }
+        }
+      })
+      set({ pageId, selectedId: id })
+    },
+    styleClipboard: null,
+    copyStyle: (id) => {
+      for (const page of get().project.pages) {
+        const n = findNode(page.children, id)
+        if (n) return set({ styleClipboard: structuredClone({ style: n.style, layout: n.layout }) })
+      }
+    },
+    pasteStyle: (id) => {
+      const clip = get().styleClipboard
+      if (clip) get().updateNode(id, (n) => void ((n.style = structuredClone(clip.style)), (n.layout = structuredClone(clip.layout))))
+    },
+    picker: null,
+    openPicker: (picker) => set({ picker }),
     addPage: () => {
       const id = newId('page')
       get().update((p) => {
