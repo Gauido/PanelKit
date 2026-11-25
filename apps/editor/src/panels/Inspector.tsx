@@ -102,6 +102,8 @@ function PropEditor({ node, f }: { node: Node; f: PropField }) {
                   { value: 'money', label: 'Dinero' },
                   { value: 'badge', label: 'Estado (etiqueta de color)' },
                   { value: 'boolean', label: 'Sí / No' },
+                  { value: 'image', label: 'Imagen' },
+                  { value: 'link', label: 'Enlace / archivo' },
                   { value: 'email', label: 'Email' },
                   { value: 'date', label: 'Fecha' },
                   { value: 'datetime', label: 'Fecha y hora' },
@@ -136,6 +138,8 @@ const fieldTypes = [
   { value: 'checkbox', label: 'Casilla (sí / no)' },
   { value: 'url', label: 'Enlace' },
   { value: 'password', label: 'Contraseña' },
+  { value: 'image', label: 'Imagen (subir)' },
+  { value: 'file', label: 'Archivo (subir)' },
 ]
 const typeLabel = (t?: string) => fieldTypes.find((x) => x.value === (t ?? 'text'))?.label ?? t
 

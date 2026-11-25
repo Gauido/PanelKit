@@ -635,3 +635,30 @@ registry.Repeater = {
   passProps: ['emptyText'],
   container: 'grid',
 }
+
+registry.Kanban = {
+  type: 'Kanban',
+  label: 'Kanban',
+  description: 'Tarjetas en columnas por estado. Arrastrá una tarjeta para cambiarla de columna',
+  icon: 'Columns3',
+  category: 'Datos',
+  defaultSpan: 12,
+  defaultProps: { title: 'Tablero', groupField: 'status', columns: '', titleField: 'title', currency: '' },
+  fields: [
+    { key: 'title', label: 'Título', kind: 'text' },
+    { key: 'query', label: 'Datos', kind: 'query', method: 'GET' },
+    { key: 'groupField', label: 'Columna según el campo', kind: 'field', queryKey: 'query' },
+    { key: 'columns', label: 'Orden de columnas (separadas por coma, opcional)', kind: 'text' },
+    { key: 'titleField', label: 'Título de la tarjeta', kind: 'field', queryKey: 'query' },
+    { key: 'subtitleField', label: 'Subtítulo de la tarjeta', kind: 'field', queryKey: 'query' },
+    { key: 'amountField', label: 'Monto (se suma por columna)', kind: 'field', queryKey: 'query' },
+    { key: 'currency', label: 'Signo del monto, ej: $', kind: 'text' },
+  ],
+  readQueries: ['query'],
+  events: [
+    { name: 'onCardMove', label: 'Al mover una tarjeta (la fila ya trae la columna nueva)', arg: 'row' },
+    { name: 'onCardClick', label: 'Al hacer clic en una tarjeta', arg: 'row' },
+  ],
+  component: { name: 'Kanban', from: '@/components/blocks/kanban' },
+  passProps: ['title', 'groupField', 'columns', 'titleField', 'subtitleField', 'amountField', 'currency'],
+}
