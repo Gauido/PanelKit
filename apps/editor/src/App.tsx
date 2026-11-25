@@ -4,8 +4,8 @@ import { Braces, ChevronLeft, Download, Eye, FileUp, Keyboard, Monitor, PenLine,
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { Button, cn, toast } from '@panelkit/blocks'
-import { generate, kebab, registry, toZip } from '@panelkit/exporter'
-import { Project } from '@panelkit/schema'
+import { generate, kebab, registry, spansFor, toZip } from '@panelkit/exporter'
+import { Project, walkNodes } from '@panelkit/schema'
 import { Canvas } from './Canvas'
 import { Home } from './Home'
 import { useLiveStyles } from './lib/live-styles'
@@ -21,6 +21,8 @@ import { IconButton } from './lib/ui'
 import { runtimeFiles } from './lib/runtime-files'
 import { useCurrentPage, useEditor, type DropTarget } from './store'
 import { useDropHint, type DropZone } from './lib/drop-hint'
+import { ContextMenu } from './lib/context-menu'
+import { BlockPicker } from './lib/block-picker'
 
 const leftTabs = [
   { id: 'blocks', label: 'Bloques' },
@@ -114,9 +116,15 @@ function TopBar({ onJson }: { onJson: () => void }) {
 
 const shortcuts: [string, string][] = [
   ['Ctrl Z / Ctrl Shift Z', 'Deshacer / rehacer'],
-  ['Supr', 'Eliminar el bloque elegido'],
+  ['Clic derecho', 'Todas las acciones del bloque'],
+  ['Doble clic', 'Editar el bloque'],
+  ['/', 'Agregar un bloque buscándolo'],
+  ['Ctrl C / Ctrl V', 'Copiar y pegar bloques'],
+  ['Ctrl X', 'Cortar el bloque'],
   ['Ctrl D', 'Duplicar el bloque elegido'],
-  ['[ y ]', 'Achicar o agrandar el bloque'],
+  ['Alt ↑ / Alt ↓', 'Mover el bloque antes o después'],
+  ['Supr', 'Eliminar el bloque elegido'],
+  ['[ y ]', 'Achicar o agrandar en este dispositivo'],
   ['Esc', 'Soltar la selección'],
   ['P', 'Pasar a modo Probar y volver'],
   ['?', 'Ver estos atajos'],
@@ -151,7 +159,7 @@ function FirstSteps() {
       return false
     }
   })
-  const steps = ['Arrastrá un bloque desde la izquierda', 'Hacé clic en él y cambiá sus datos a la derecha', 'Tocá Probar para usarlo como una app real', 'Exportá el repo cuando esté listo']
+  const steps = ['Tocá + o apretá / para agregar un bloque (o arrastralo)', 'Clic derecho sobre un bloque para ver todo lo que podés hacer', 'Tocá Probar para usarlo como una app real', 'Exportá el repo cuando esté listo']
   return (
     <AnimatePresence>
       {!hidden && (
@@ -255,8 +263,27 @@ function Editor() {
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && s.selectedId) {
         e.preventDefault()
         s.removeNode(s.selectedId)
+      } else if (mod && key === 'c' && s.selectedId) {
+        if (window.getSelection()?.toString()) return
+        e.preventDefault()
+        s.copyNode(s.selectedId)
+        toast('Bloque copiado')
+      } else if (mod && key === 'x' && s.selectedId) {
+        e.preventDefault()
+        s.copyNode(s.selectedId)
+        s.removeNode(s.selectedId)
+      } else if (mod && key === 'v' && s.clipboard) {
+        e.preventDefault()
+        s.pasteNode(s.selectedId ? { afterId: s.selectedId } : undefined)
+      } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && s.selectedId) {
+        e.preventDefault()
+        s.nudgeNode(s.selectedId, e.key === 'ArrowUp' ? -1 : 1)
+      } else if (e.key === '/' && !s.preview) {
+        e.preventDefault()
+        s.openPicker(s.selectedId ? { afterId: s.selectedId } : {})
       } else if ((e.key === '[' || e.key === ']') && s.selectedId) {
-        s.updateNode(s.selectedId, (n) => void (n.layout.span = Math.min(12, Math.max(1, n.layout.span + (e.key === ']' ? 1 : -1)))))
+        const n = s.project.pages.flatMap((p) => [...walkNodes(p.children)]).find((x) => x.id === s.selectedId)
+        if (n) s.setSpanFor(n.id, s.device, spansFor(n.layout)[s.device] + (e.key === ']' ? 1 : -1))
       } else if (e.key === 'Escape') {
         s.select(null)
         setHelp(false)
@@ -363,6 +390,8 @@ function Editor() {
           </DragOverlay>
         </DndContext>
       )}
+      {!preview && <ContextMenu />}
+      <BlockPicker />
       <JsonDialog open={json} onClose={() => setJson(false)} />
       <AnimatePresence>{help && <Shortcuts onClose={() => setHelp(false)} />}</AnimatePresence>
     </div>

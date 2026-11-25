@@ -405,7 +405,7 @@ export function Inspector() {
   }
   const def = registry[node.type]
   return (
-    <div>
+    <div data-inspector>
       <div className="sticky top-0 z-10 border-b border-border bg-card/90 px-4 pt-4 backdrop-blur">
         <p className="text-sm font-semibold">{def?.label ?? node.type}</p>
         <p className="text-[11px] text-muted-foreground">{def?.description}</p>

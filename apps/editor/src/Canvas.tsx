@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Copy, GripVertical, Minus, Plus, Trash2 } from 'lucide-react'
+import { Copy, GripVertical, Minus, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { cn } from '@panelkit/blocks'
 import { layoutClass, registry, spansFor, styleClass } from '@panelkit/exporter'
@@ -11,10 +11,12 @@ import { BlockView, type RenderChildren } from './lib/render'
 import { PageStateProvider } from './lib/page-state'
 import { DeviceFrame } from './lib/device-frame'
 import { useDropHint } from './lib/drop-hint'
+import { focusInspector, useContextMenu } from './lib/context-menu'
 
 function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
   const selected = useEditor((s) => s.selectedId === node.id)
-  const { select, updateNode, removeNode, duplicateNode, selectPage, project } = useEditor()
+  const { select, setSpanFor, removeNode, duplicateNode, selectPage, project, openPicker } = useEditor()
+  const openMenu = useContextMenu((m) => m.open)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: node.id, data: { kind: 'node', container: Boolean(registry[node.type]?.container) } })
   const def = registry[node.type]
   const device = useEditor((s) => s.device)
@@ -24,13 +26,7 @@ function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
   const hiddenHere = Boolean(node.layout.hide?.includes(device))
   const hint = useDropHint((h) => (h.id === node.id ? h.zone : null))
   const fullRow = inList || span === 12
-  const setSpan = (v: number) =>
-    updateNode(node.id, (n) => {
-      const next = Math.min(12, Math.max(1, v))
-      if (device === 'desktop') n.layout.span = next
-      else if (device === 'tablet') n.layout.spanTablet = next
-      else n.layout.spanMobile = next
-    })
+  const setSpan = (v: number) => setSpanFor(node.id, device, v)
 
   return (
     <div
@@ -47,6 +43,18 @@ function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
           e.preventDefault()
         }
         select(node.id)
+      }}
+      onDoubleClick={(e) => {
+        if ((e.target as HTMLElement).closest('[data-node-id]') !== e.currentTarget) return
+        select(node.id)
+        focusInspector()
+      }}
+      onContextMenu={(e) => {
+        if ((e.target as HTMLElement).closest('[data-node-id]') !== e.currentTarget) return
+        e.preventDefault()
+        e.stopPropagation()
+        select(node.id)
+        openMenu(e.clientX, e.clientY, node.id)
       }}
     >
       <div
@@ -103,7 +111,33 @@ function SortableBlock({ node, inList }: { node: Node; inList?: boolean }) {
         <button className="rounded-md p-1 text-rose-600 hover:bg-rose-500/10" onClick={() => removeNode(node.id)} aria-label="Eliminar">
           <Trash2 className="size-3.5" />
         </button>
+        <button
+          className="rounded-md p-1 hover:bg-muted"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect()
+            openMenu(r.left, r.bottom + 4, node.id)
+          }}
+          aria-label="Más acciones"
+          title="Más acciones (o clic derecho sobre el bloque)"
+        >
+          <MoreHorizontal className="size-3.5" />
+        </button>
       </motion.div>
+      {/* Quick add right after this block, without dragging. */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          openPicker({ afterId: node.id })
+        }}
+        className={cn(
+          'absolute -bottom-7 left-1/2 z-20 grid size-6 -translate-x-1/2 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-all hover:scale-110 hover:border-primary hover:text-primary',
+          selected ? 'opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100',
+        )}
+        aria-label="Agregar bloque después"
+        title="Agregar bloque después"
+      >
+        <Plus className="size-3.5" />
+      </button>
     </div>
   )
 }
@@ -123,9 +157,15 @@ function NestedArea({ parent, layout }: { parent: Node; layout: 'grid' | 'list' 
         ))}
       </SortableContext>
       {kids.length === 0 && (
-        <p className="col-span-12 -mt-6 rounded-lg border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
-          Arrastrá bloques acá {layout === 'list' ? '(cada uno es una pestaña)' : ''}
-        </p>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            useEditor.getState().openPicker({ parentId: parent.id })
+          }}
+          className="col-span-12 -mt-6 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-6 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+        >
+          <Plus className="size-3.5" /> Agregar bloque o arrastrá uno acá {layout === 'list' ? '(cada uno es una pestaña)' : ''}
+        </button>
       )}
     </div>
   )
@@ -138,10 +178,20 @@ export function Canvas() {
   const select = useEditor((s) => s.select)
   const { setNodeRef, isOver } = useDroppable({ id: 'canvas', data: { kind: 'canvas' } })
   const device = useEditor((s) => s.device)
+  const openPicker = useEditor((s) => s.openPicker)
+  const openMenu = useContextMenu((m) => m.open)
 
   return (
     <PageStateProvider key={page.id} initial={page.state ?? {}}>
-    <div className="editor-dots min-h-0 flex-1 overflow-auto" onClick={() => select(null)}>
+    <div
+      className="editor-dots min-h-0 flex-1 overflow-auto"
+      onClick={() => select(null)}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        select(null)
+        openMenu(e.clientX, e.clientY, null)
+      }}
+    >
       <div className="p-6 pt-12 md:p-10 md:pt-14">
         <DeviceFrame device={device}>
         <div
@@ -156,13 +206,33 @@ export function Canvas() {
               <SortableBlock key={n.id} node={n} />
             ))}
           </SortableContext>
-          {page.children.length === 0 && (
-            <div className="col-span-12 grid place-items-center rounded-2xl border-2 border-dashed border-border py-24 text-center">
+          {page.children.length === 0 ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                openPicker({})
+              }}
+              className="col-span-12 grid place-items-center rounded-2xl border-2 border-dashed border-border py-24 text-center transition-colors hover:border-primary/50 hover:bg-primary/5"
+            >
               <div>
-                <p className="font-medium">Arrastrá un bloque acá</p>
-                <p className="mt-1 text-sm text-muted-foreground">Tablas, KPIs, formularios y botones, desde el panel de la izquierda.</p>
+                <span className="mx-auto grid size-10 place-items-center rounded-full bg-primary/10 text-primary">
+                  <Plus className="size-5" />
+                </span>
+                <p className="mt-3 font-medium">Agregá tu primer bloque</p>
+                <p className="mt-1 text-sm text-muted-foreground">Hacé clic acá, apretá / o arrastrá uno desde la izquierda.</p>
               </div>
-            </div>
+            </button>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                openPicker({})
+              }}
+              className="col-span-12 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-4 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+            >
+              <Plus className="size-4" /> Agregar bloque
+              <kbd className="rounded border border-border px-1.5 font-sans text-[11px]">/</kbd>
+            </button>
           )}
         </div>
         </DeviceFrame>
