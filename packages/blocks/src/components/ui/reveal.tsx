@@ -1,15 +1,16 @@
 import { motion } from 'motion/react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { motionLevel, motionPresets } from '../../lib/motion'
 
 /** Fades and lifts its children in; `index` staggers siblings. Intensity follows the theme's motion level. */
-export function Reveal({ children, index = 0, className }: { children: ReactNode; index?: number; className?: string }) {
+export function Reveal({ children, index = 0, className, style }: { children: ReactNode; index?: number; className?: string; style?: CSSProperties }) {
   const level = motionLevel()
   const m = motionPresets[level]
-  if (level === 'none') return <div className={className}>{children}</div>
+  if (level === 'none') return <div className={className} style={style}>{children}</div>
   return (
     <motion.div
       className={className}
+      style={style}
       initial={{ opacity: 0, y: m.y, scale: m.scale, filter: `blur(${m.blur}px)` }}
       animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
       transition={

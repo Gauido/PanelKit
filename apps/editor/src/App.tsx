@@ -14,6 +14,7 @@ import { Preview } from './Preview'
 import { Data } from './panels/Data'
 import { Inspector } from './panels/Inspector'
 import { Pages } from './panels/Pages'
+import { Layers } from './panels/Layers'
 import { Palette } from './panels/Palette'
 import { Theme } from './panels/Theme'
 import { Icon } from './lib/icon'
@@ -26,6 +27,7 @@ import { BlockPicker } from './lib/block-picker'
 
 const leftTabs = [
   { id: 'blocks', label: 'Bloques' },
+  { id: 'layers', label: 'Capas' },
   { id: 'pages', label: 'Páginas' },
   { id: 'data', label: 'Datos' },
   { id: 'theme', label: 'Estilo' },
@@ -357,6 +359,7 @@ function Editor() {
                 <AnimatePresence mode="wait">
                   <motion.div key={tab} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 6 }} transition={{ duration: 0.15 }}>
                     {tab === 'blocks' && <Palette />}
+                    {tab === 'layers' && <Layers />}
                     {tab === 'pages' && <Pages />}
                     {tab === 'data' && <Data />}
                     {tab === 'theme' && <Theme />}

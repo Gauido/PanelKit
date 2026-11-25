@@ -154,6 +154,32 @@ describe('page state, containers and custom code', () => {
   })
 })
 
+describe('free layout, conditions and repeaters', () => {
+  const dir = generate(crmTemplate, readRuntime())['src/pages/directorio.tsx']!
+
+  it('repeats the blocks inside once per row, with item in scope', () => {
+    expect(dir).toMatch(/<Repeater\s+emptyText="Todavía no hay contactos."\s+data=\{contacts.data\}\s+loading=\{contacts.isLoading\}\s+>/)
+    expect(dir).toContain('{(item, index) => (')
+    expect(dir).toContain("title={bind('{{item.name}}', { state, item, index })}")
+    expect(dir).toContain("description={tpl('{{item.company}} · {{item.city}}', { state, item, index })}")
+  })
+
+  it('guards conditional blocks and keeps free CSS', () => {
+    expect(dir).toContain("{when(() => item.stage === 'Cliente') && (")
+    expect(dir).toContain("style={{ paddingBottom: '4px' }}")
+    expect(dir).toContain('<div className="col-span-12 text-emerald-600">')
+  })
+
+  it('lays flex children out by their content, not on the grid', () => {
+    expect(dir).toMatch(/<Stack[^>]*>\s*<div>\s*<Text text="Directorio" variant="title" \/>/)
+  })
+
+  it('ignores a broken condition instead of breaking the build', async () => {
+    const { conditionOf } = await import('../packages/exporter/src/generate')
+    expect(conditionOf({ id: 'x', type: 'Text', layout: { span: 12 }, props: {}, style: {}, events: {}, visibleIf: 'state.(' })).toBeUndefined()
+  })
+})
+
 describe('templates at runtime', async () => {
   const { resolve, tpl } = await import('../packages/blocks/src/lib/template')
   it('returns whole values for a single placeholder', () => {

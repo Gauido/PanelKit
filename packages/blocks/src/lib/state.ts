@@ -26,3 +26,23 @@ export function usePageState(initial: Record<string, unknown> = {}): PageState {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type CodeScope = Record<string, any>
+
+/** For "show only if": true when the condition holds; false if it fails (e.g. data not loaded yet). */
+export function when(condition: () => unknown): boolean {
+  try {
+    return Boolean(condition())
+  } catch {
+    return false
+  }
+}
+
+/** Same as `when`, for a condition written as text (used by the editor). */
+export function whenText(expr: string | undefined, scope: Record<string, unknown>): boolean {
+  if (!expr?.trim()) return true
+  try {
+    const keys = Object.keys(scope)
+    return Boolean(new Function(...keys, `return (${expr})`)(...keys.map((k) => scope[k])))
+  } catch {
+    return false
+  }
+}
