@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { confirm, createApi, createMockApi, resolve, toast, tpl, type Api, type PageState } from '@panelkit/blocks'
+import { confirm, createApi, createMockApi, getSession, logout, resolve, toast, tpl, type Api, type PageState } from '@panelkit/blocks'
 import { camel } from '@panelkit/exporter'
 import { openKey, resolveEnv, type Action, type Project } from '@panelkit/schema'
 
@@ -35,7 +35,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as
 export async function runActions(actions: Action[] | undefined, args: Record<string, unknown>, ctx: Ctx) {
   for (const a of actions ?? []) {
     // Re-read state before each step, so a value set by a previous step is visible.
-    const scope: Record<string, unknown> = { ...args, state: ctx.page.get() }
+    const scope: Record<string, unknown> = { ...args, state: ctx.page.get(), user: getSession()?.user ?? {} }
     try {
       switch (a.type) {
         case 'callQuery': {
@@ -48,6 +48,9 @@ export async function runActions(actions: Action[] | undefined, args: Record<str
         }
         case 'setState':
           ctx.page.set(a.key, resolve(a.value, scope))
+          break
+        case 'logout':
+          logout()
           break
         case 'openModal':
         case 'closeModal':

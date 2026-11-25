@@ -25,15 +25,20 @@ PanelKit is done when a small business without a programmer, or a dev who only w
 - [x] Row actions (edit / delete) and a confirmation step for any event
 - [x] Quick filter chips on tables; money, date-time and yes/no columns
 - [x] Form fields: time, date-time, phone, URL, password
-- [ ] Record detail (side panel) and edit-in-modal
-- [ ] Tabs and wizard (blocks that contain other blocks)
+- [x] Record detail (side panel) and edit-in-modal
+- [x] Tabs, sections, modals and rows/columns (blocks that contain other blocks)
+- [ ] Wizard (steps)
+- [x] Repeater: any blocks once per record (cards, galleries, lists)
+- [x] Basic elements: text, image, divider, spacer
+- [x] Show only if: conditions picked from lists, code optional
 - [ ] Kanban by status
 - [ ] File / image upload, rich text, map, notifications
 
 ### 2. Auth and roles
-- [ ] Login page block against your own API (email + password, token stored, sent on every call)
-- [ ] Roles: show or hide pages, blocks and buttons per role
-- [ ] Logout, session expiry, "who am I" in the shell
+- [x] Login against your own API (email + password, token stored, sent on every call), demo users for sample data
+- [x] Roles: show or hide pages and blocks per role
+- [x] Logout and "who am I" in the shell, {{user.x}} in texts
+- [ ] Session expiry / refresh token
 
 ### 3. Local first: `npx panelkit`
 - [ ] CLI that opens the editor on `localhost` and reads/writes `panelkit.json` in the current repo
@@ -50,7 +55,8 @@ PanelKit is done when a small business without a programmer, or a dev who only w
 - [ ] Optional small server for direct Postgres / MySQL
 
 ### 6. Editor comfort
-- [ ] Mobile / tablet preview
+- [x] Mobile / tablet preview, widths and hiding per device
+- [x] Right-click menu, copy/paste, block search, layers panel, inline text editing, free CSS
 - [ ] Free placement grid (rows and columns, Figma-like)
 - [ ] Design comments
 - [ ] English / Spanish UI

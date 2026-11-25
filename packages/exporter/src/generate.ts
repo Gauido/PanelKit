@@ -56,6 +56,10 @@ function apiClient(project: Project): string {
 }
 
 type PageCtx = {
+  /** Login is on: blocks can be limited to roles (`can`) and read the signed-in user. */
+  auth?: boolean
+  usesUser?: boolean
+  usesCan?: boolean
   /** Inside a Lista repetida: templates and code can read `item` and `index`. */
   inItem?: boolean
   imports: Map<string, Set<string>>
@@ -93,7 +97,7 @@ function pageUsesState(project: Project, page: Page): boolean {
 const indent = (lines: string[], by = 1) => lines.map((l) => (l ? '  '.repeat(by) + l : l))
 
 function scopeOf(arg: string | undefined, ctx: PageCtx): string {
-  const parts = [arg, ctx.usesState ? 'state: page.get()' : undefined, ctx.inItem ? 'item, index' : undefined].filter(Boolean)
+  const parts = [arg, ctx.usesState ? 'state: page.get()' : undefined, ctx.inItem ? 'item, index' : undefined, ctx.usesUser ? 'user' : undefined].filter(Boolean)
   return parts.length ? `{ ${parts.join(', ')} }` : '{}'
 }
 
@@ -122,6 +126,10 @@ function actionLines(project: Project, actions: Action[], arg: string | undefine
         out.push(`page.set(${toJs(a.key)}, ${value})`)
         break
       }
+      case 'logout':
+        addImport(ctx, '@/lib/auth', 'logout')
+        out.push('logout()')
+        break
       case 'openModal':
       case 'closeModal':
         out.push(`page.set(${toJs(openKey(a.target))}, ${a.type === 'openModal'})`)
@@ -161,8 +169,8 @@ function actionLines(project: Project, actions: Action[], arg: string | undefine
 
 /** A prop value as JSX, resolving {{state.x}} at render time. */
 function propAttr(key: string, value: unknown, ctx: PageCtx): string | null {
-  if (!hasTemplate(value) || (!ctx.usesState && !ctx.inItem)) return jsxAttr(key, value, 0)
-  const scope = `{ ${[ctx.usesState && 'state', ctx.inItem && 'item, index'].filter(Boolean).join(', ')} }`
+  if (!hasTemplate(value) || (!ctx.usesState && !ctx.inItem && !ctx.usesUser)) return jsxAttr(key, value, 0)
+  const scope = `{ ${[ctx.usesState && 'state', ctx.inItem && 'item, index', ctx.usesUser && 'user'].filter(Boolean).join(', ')} }`
   if (typeof value === 'string' && !/^\{\{\s*[\w.]+\s*\}\}$/.test(value)) {
     addImport(ctx, '@/lib/template', 'tpl')
     return `${key}={tpl(${toJs(value)}, ${scope})}`
@@ -214,9 +222,18 @@ export function conditionOf(node: Node): string | undefined {
 /** Wraps JSX lines so they only render when the block's condition holds. */
 function guard(node: Node, lines: string[], ctx: PageCtx): string[] {
   const cond = conditionOf(node)
-  if (!cond) return lines
-  addImport(ctx, '@/lib/state', 'when')
-  return [`{when(() => ${cond}) && (`, ...indent(lines), ')}']
+  const roles = ctx.auth && node.roles?.length ? node.roles : undefined
+  if (!cond && !roles) return lines
+  const checks: string[] = []
+  if (roles) {
+    ctx.usesCan = true
+    checks.push(`can(${toJs(roles)})`)
+  }
+  if (cond) {
+    addImport(ctx, '@/lib/state', 'when')
+    checks.push(`when(() => ${cond})`)
+  }
+  return [`{${checks.join(' && ')} && (`, ...indent(lines), ')}']
 }
 
 function blockLines(project: Project, node: Node, ctx: PageCtx): string[] {
@@ -228,7 +245,7 @@ function blockLines(project: Project, node: Node, ctx: PageCtx): string[] {
     const a = def.type === 'HtmlBlock' ? jsxAttr(key, node.props[key], 0) : propAttr(key, node.props[key], ctx)
     if (a) attrs.push(a)
   }
-  if (def.type === 'HtmlBlock' && (ctx.usesState || ctx.inItem) && hasTemplate(node.props.html)) attrs.push(`scope={{ ${[ctx.usesState && 'state', ctx.inItem && 'item, index'].filter(Boolean).join(', ')} }}`)
+  if (def.type === 'HtmlBlock' && (ctx.usesState || ctx.inItem || ctx.usesUser) && hasTemplate(node.props.html)) attrs.push(`scope={{ ${[ctx.usesState && 'state', ctx.inItem && 'item, index', ctx.usesUser && 'user'].filter(Boolean).join(', ')} }}`)
   for (const key of def.readQueries) {
     const qid = node.props[key]
     if (typeof qid !== 'string') continue
@@ -297,11 +314,15 @@ function nodeJsx(project: Project, node: Node, index: number, ctx: PageCtx): str
 }
 
 export function pageFile(project: Project, page: Page): { path: string; component: string; code: string } {
-  const ctx: PageCtx = { imports: new Map(), hooks: [], needsNavigate: false, needsQueryClient: false, queryVars: new Map(), usesState: pageUsesState(project, page) }
+  const auth = project.auth.enabled
+  const usesUser = auth && [...walkNodes(page.children)].some((n) => /\{\{\s*user\./.test(JSON.stringify([n.props, n.events])) || /\buser\./.test(n.visibleIf ?? ''))
+  const ctx: PageCtx = { imports: new Map(), hooks: [], needsNavigate: false, needsQueryClient: false, queryVars: new Map(), usesState: pageUsesState(project, page), auth, usesUser }
   addImport(ctx, '@/components/ui/reveal', 'Reveal')
   if (ctx.usesState) addImport(ctx, '@/lib/state', 'usePageState')
   const body = page.children.map((n, i) => nodeJsx(project, n, i, ctx)).join('\n')
   if (ctx.needsNavigate) addImport(ctx, 'react-router', 'useNavigate')
+  if (ctx.usesCan) addImport(ctx, '@/lib/auth-config', 'useCan')
+  if (ctx.usesUser) addImport(ctx, '@/lib/auth', 'useSession')
   if (ctx.needsQueryClient) addImport(ctx, '@tanstack/react-query', 'useQueryClient')
   const component = `${pascal(page.title)}Page`
   const imports = [...ctx.imports.entries()]
@@ -309,6 +330,8 @@ export function pageFile(project: Project, page: Page): { path: string; componen
     .map(([from, names]) => `import { ${[...names].sort().join(', ')} } from '${from}'`)
   const hooks = [
     ...(ctx.usesState ? [`const page = usePageState(${toJs(page.state ?? {}, 1)})`, 'const state = page.state'] : []),
+    ...(ctx.usesUser ? ['const user = useSession()?.user ?? {}'] : []),
+    ...(ctx.usesCan ? ['const can = useCan()'] : []),
     ...(ctx.needsNavigate ? ['const navigate = useNavigate()'] : []),
     ...(ctx.needsQueryClient ? ['const queryClient = useQueryClient()'] : []),
     ...ctx.hooks,
@@ -328,24 +351,62 @@ ${body}
 }
 
 function mainFile(project: Project, pages: ReturnType<typeof pageFile>[]): string {
+  const auth = project.auth.enabled ? project.auth : undefined
   const imports = pages.map((p) => `import ${p.component} from '@/pages/${p.path.slice('src/pages/'.length, -4)}'`)
-  const nav = project.pages.map((p) => ({ path: p.path, title: p.title, icon: p.icon }))
-  const routes = project.pages.map((p, i) => `      { path: ${toJs(p.path)}, element: <${pages[i]!.component} /> },`)
-  return `import { StrictMode } from 'react'
+  const nav = project.pages.map((p) => ({ path: p.path, title: p.title, icon: p.icon, ...(auth && p.roles?.length ? { roles: p.roles } : {}) }))
+  const routes = project.pages.map((p, i) => {
+    const el = `<${pages[i]!.component} />`
+    return `      { path: ${toJs(p.path)}, element: ${auth && p.roles?.length ? `<Guard roles={${toJs(p.roles)}}>${el}</Guard>` : el} },`
+  })
+  const source = auth && project.dataSources.find((d) => d.id === auth.source)
+  const demo = source && source.type === 'static' ? source.tables.users?.[0] : undefined
+  const hint = demo ? `Para probar: ${String(demo.email)} / ${String(demo.password)}` : undefined
+  const shell = auth
+    ? `/** Asks to sign in first; then the menu only shows the pages your role can open. */
+function Shell() {
+  const session = useSession()
+  if (!session) {
+    return <LoginScreen name=${JSON.stringify(project.name)} onLogin={(email, password) => login(${source ? sourceVar(project, source.id) : 'undefined as never'}, authConfig, email, password)}${hint ? ` hint=${JSON.stringify(hint)}` : ''} />
+  }
+  const user = session.user
+  return (
+    <AppShell
+      name=${JSON.stringify(project.name)}
+      nav={nav.filter((item) => hasRole(session, item.roles, authConfig.roleField))}
+      mode=${JSON.stringify(project.theme.mode)}
+      user={{ name: String(user.name ?? ''), email: String(user.email ?? ''), role: String(user[authConfig.roleField] ?? '') }}
+      onLogout={logout}
+    />
+  )
+}
+
+/** Pages limited to some roles. */
+function Guard({ roles, children }: { roles: string[]; children: ReactNode }) {
+  const session = useSession()
+  if (hasRole(session, roles, authConfig.roleField)) return children
+  return <p className="py-24 text-center text-muted-foreground">No tenés permiso para ver esta página.</p>
+}
+`
+    : ''
+  return `import { StrictMode${auth ? ', type ReactNode' : ''} } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createBrowserRouter, RouterProvider } from 'react-router'
 import { AppShell, type NavItem } from '@/layout/app-shell'
 import { Toaster } from '@/components/ui/toaster'
 import { ConfirmHost } from '@/components/ui/confirm'
-${imports.join('\n')}
+${auth ? `import { LoginScreen } from '@/components/blocks/login-screen'
+import { hasRole, login, logout, setSessionKey, useSession } from '@/lib/auth'
+import { authConfig } from '@/lib/auth-config'
+${source ? `import { ${sourceVar(project, source.id)} } from '@/api/client'
+` : ''}` : ''}${imports.join('\n')}
 import '@/index.css'
-
-const nav: NavItem[] = ${toJs(nav, 0)}
-
+${auth ? `\nsetSessionKey(${JSON.stringify(kebab(project.name))})\n` : ''}
+const nav: ${auth ? '(NavItem & { roles?: string[] })[]' : 'NavItem[]'} = ${toJs(nav, 0)}
+${shell}
 const router = createBrowserRouter([
   {
-    element: <AppShell name=${JSON.stringify(project.name)} nav={nav} mode=${JSON.stringify(project.theme.mode)} />,
+    element: ${auth ? '<Shell />' : `<AppShell name=${JSON.stringify(project.name)} nav={nav} mode=${JSON.stringify(project.theme.mode)} />`},
     children: [
 ${routes.join('\n')}
     ],
@@ -363,6 +424,22 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 )
+`
+}
+
+function authConfigFile(project: Project): string {
+  const a = project.auth
+  const cfg = { loginPath: a.loginPath, emailField: a.emailField, passwordField: a.passwordField, tokenPath: a.tokenPath, userPath: a.userPath, roleField: a.roleField }
+  return `import { hasRole, useSession, type AuthConfig } from './auth'
+
+/** How your API signs people in. Roles: ${a.roles.join(', ')}. */
+export const authConfig: AuthConfig = ${toJs(cfg, 0)}
+
+/** \`can(['admin'])\` is true when the signed-in user has one of those roles. */
+export function useCan() {
+  const session = useSession()
+  return (roles: string[]) => hasRole(session, roles, authConfig.roleField)
+}
 `
 }
 
@@ -414,6 +491,7 @@ export function generate(project: Project, runtime: RuntimeFiles): GeneratedFile
   const sample = sampleDataFile(project)
   if (sample) files['src/api/sample-data.ts'] = sample
   files['src/main.tsx'] = mainFile(project, pages)
+  if (project.auth.enabled) files['src/lib/auth-config.ts'] = authConfigFile(project)
   files['src/vite-env.d.ts'] = '/// <reference types="vite/client" />\n'
   const font = fonts[project.theme.font]
   const vars = Object.entries(themeVars(project.theme)).map(([k, v]) => `  ${k}: ${v};`).join('\n')

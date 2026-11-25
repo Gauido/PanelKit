@@ -66,6 +66,11 @@ function SortableBlock({ node, mode = 'grid' }: { node: Node; mode?: 'grid' | 'l
           selected ? 'outline outline-primary' : 'outline outline-transparent hover:outline-primary/30',
         )}
       >
+        {node.roles?.length ? (
+          <span className="pointer-events-none absolute -top-2.5 left-2 z-10 rounded-full border border-sky-500/40 bg-sky-50 px-1.5 text-[10px] font-medium text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+            Solo {node.roles.join(', ')}
+          </span>
+        ) : null}
         {node.visibleIf?.trim() && (
           <span className="pointer-events-none absolute -top-2.5 right-2 z-10 rounded-full border border-amber-500/40 bg-amber-50 px-1.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300" title={`Se muestra solo si: ${node.visibleIf}`}>
             Condicional

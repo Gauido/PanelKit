@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { getSession } from './auth'
 
 export type Api = {
   baseUrl: string
@@ -12,9 +13,12 @@ export function createApi(baseUrl: string, headers: Record<string, string> = {})
     baseUrl: root,
     headers,
     async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+      // Signed in: send the token, unless the data source sets its own Authorization header.
+      const token = getSession()?.token
+      const auth: Record<string, string> = token && !Object.keys(headers).some((h) => h.toLowerCase() === 'authorization') ? { Authorization: `Bearer ${token}` } : {}
       const res = await fetch(`${root}${path.startsWith('/') ? path : `/${path}`}`, {
         method,
-        headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
+        headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}), ...auth, ...headers },
         body: body ? JSON.stringify(body) : undefined,
       })
       if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status} ${res.statusText}`)
@@ -38,6 +42,15 @@ export function createMockApi(tables: Record<string, Record<string, unknown>[]>,
       await delay()
       const [route = '', search = ''] = path.split('?')
       const [table = '', id] = route.replace(/^\/+/, '').split('/')
+      // Demo login: POST /auth/login checks the "users" table (email + password).
+      if (table === 'auth' && id === 'login' && method.toUpperCase() === 'POST') {
+        const b = (body ?? {}) as Record<string, unknown>
+        const email = String(b.email ?? b.username ?? b.user ?? '').trim().toLowerCase()
+        const user = (db.users ?? []).find((u) => String(u.email ?? '').toLowerCase() === email && String(u.password ?? '') === String(b.password ?? ''))
+        if (!user) throw new Error('401 Email o contraseña incorrectos')
+        const { password: _omit, ...safe } = user
+        return { token: `demo-${String(user.id)}`, user: safe } as T
+      }
       const rows = (db[table] ??= [])
       // "/bookings?court=Cancha 1&status=" keeps rows that match every non-empty param.
       const filters = [...new URLSearchParams(search)].filter(([, v]) => v !== '')

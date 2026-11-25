@@ -2,7 +2,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
   ActionButton, AvailabilityGrid, Calendar, Chart, DataTable, Divider, EntityForm, Filter, HtmlBlock, Image, KpiCard, Modal, PageHeader, Section, Spacer, Stack, Tabs, Text, Timeline,
-  hasTemplate, resolve, toRows, tpl, useApiQuery, whenText, type Slot,
+  hasRole, hasTemplate, resolve, toRows, tpl, useSession, useApiQuery, whenText, type Slot,
 } from '@panelkit/blocks'
 import { layoutClass, registry, styleClass, styleCss } from '@panelkit/exporter'
 import { openKey, type Node } from '@panelkit/schema'
@@ -55,7 +55,8 @@ export function BlockView({ node, live, onNavigate, design, renderChildren }: Pr
   const queryClient = useQueryClient()
   const page = usePage()
   const itemScope = useItem()
-  const scope = { state: page.state, ...(itemScope ?? {}) }
+  const session = useSession()
+  const scope = { state: page.state, user: session?.user ?? {}, ...(itemScope ?? {}) }
   const data = useNodeData(node.props.query ?? node.props.optionsQuery, page.state)
   const optionData = useOptionData(node.type === 'EntityForm' ? node.props.fields : undefined, page.state)
   const raw = node.props as Record<string, any>
@@ -240,12 +241,14 @@ export function BlockView({ node, live, onNavigate, design, renderChildren }: Pr
 function Children({ parent, layout, live, onNavigate, design }: { parent: Node; layout: 'grid' | 'list' | 'flex'; live: boolean; onNavigate: (to: string) => void; design?: boolean }) {
   const page = usePage()
   const itemScope = useItem()
+  const session = useSession()
+  const auth = useEditor((s) => s.project.auth)
   return (
     <>
       {(parent.children ?? []).map((c) => {
         if (registry[c.type]?.container === 'overlay') return <BlockView key={c.id} node={c} live={live} onNavigate={onNavigate} design={design} />
         // Tabs keep every tab; elsewhere a block whose condition fails is left out.
-        const visible = whenText(c.visibleIf, { state: page.state, ...(itemScope ?? {}) })
+        const visible = whenText(c.visibleIf, { state: page.state, user: session?.user ?? {}, ...(itemScope ?? {}) }) && (design || !auth.enabled || hasRole(session, c.roles, auth.roleField))
         if (!visible && layout !== 'list') return null
         return (
           <div key={c.id} className={layout === 'grid' ? `${layoutClass(c.layout)} ${styleClass(c.style)}` : styleClass(c.style)} style={styleCss(c.style)}>
